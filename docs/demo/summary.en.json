@@ -1,0 +1,10 @@
+{
+  "V1__init.sql": "Creates customers, products, orders and order items, plus the legacy coupons and tags tables.",
+  "V2__customer_phone.sql": "Adds a phone column to customers, with an index.",
+  "V3__rename_order_status.sql": "Renames orders.status to state (confirmed) and widens it to 30 characters.",
+  "V4__product_sku.sql": "Adds a NOT NULL, UNIQUE sku to products and widens the price precision. Adding sku fails if products already has rows.",
+  "V5__shipments.sql": "Adds a shipment status enum and a shipments table that references orders.",
+  "V6__order_summary_view.sql": "Adds a view of order count and amount per customer.",
+  "V7__drop_legacy.sql": "Drops the whole legacy coupons table and the customers.fax and orders.memo columns. Their data is lost.",
+  "V8__recreate_tags.sql": "Drops and recreates the tags table with a longer label and a color. All existing tag rows are lost."
+}

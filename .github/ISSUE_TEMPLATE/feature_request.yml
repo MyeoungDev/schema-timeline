@@ -1,0 +1,16 @@
+name: Feature request
+description: A migration tool, engine, check or view you would like supported.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The task you are trying to get done and where the current output falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A sample history, DDL or screenshot that shows the case.

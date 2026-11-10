@@ -1,0 +1,88 @@
+{
+  "tables": [
+    {
+      "name": "Users",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "Users_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "notes",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "body",
+          "ordinal": 2,
+          "type": "text",
+          "nullable": true,
+          "default": "'</script><img src=x onerror=alert(1)>'::text",
+          "comment": "<!--<script>"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 3,
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "notes_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "notes_user_id_fkey",
+          "kind": "f",
+          "columns": [
+            "user_id"
+          ],
+          "ref_table": "Users",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (user_id) REFERENCES \"Users\"(id)"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "views": [],
+  "source": "injection_after.sql"
+}

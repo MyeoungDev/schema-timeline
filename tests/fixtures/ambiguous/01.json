@@ -1,0 +1,41 @@
+{
+  "tables": [
+    {
+      "name": "t",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "p",
+          "ordinal": 2,
+          "type": "character varying(10)",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "t_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "views": [],
+  "source": "ambiguous_after.sql"
+}

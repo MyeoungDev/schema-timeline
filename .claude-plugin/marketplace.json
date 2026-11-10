@@ -1,0 +1,13 @@
+{
+  "name": "schema-timeline",
+  "description": "Claude Code skill that visualizes database schema changes from migration history.",
+  "owner": { "name": "schema-timeline contributors" },
+  "plugins": [
+    {
+      "name": "schema-timeline",
+      "source": "./",
+      "description": "Replay DB migration history in a throwaway container and render a single-file HTML schema timeline.",
+      "version": "0.1.0"
+    }
+  ]
+}

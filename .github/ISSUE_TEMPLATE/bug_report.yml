@@ -1,0 +1,58 @@
+name: Bug report
+description: A replay fails, a change is reported wrongly, or the page misbehaves.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems go to a private advisory, not here. See SECURITY.md.
+        Do not paste production SQL as is: rename tables and remove data rows first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected and what you got. For a wrong change review, name the step and the table or column.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The command you ran, or what you asked Claude.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: history
+    attributes:
+      label: Smallest history that reproduces it
+      description: The fewest migration files that show the problem, with their file names. Attach a zip if it is long.
+      render: sql
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database (--db)
+      options: [postgres, mysql, mariadb, oracle]
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: History format (--format, or DDL compare)
+      options: [flyway, sqlfiles, supabase, prisma, drizzle, git-snapshots, DDL compare]
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output or self-check result
+      description: The error text, or the JSON printed by `node scripts/check_html.mjs <out>/timeline.html`.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: schema-timeline version, image tag if not the default, OS, Docker version.
+      placeholder: 0.1.0, postgres:16-alpine, macOS 15, Docker 27.3

@@ -1,0 +1,97 @@
+{
+  "tables": [
+    {
+      "name": "accounts",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('accounts_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "email",
+          "ordinal": 2,
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "accounts_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "accounts_email_idx",
+          "unique": false,
+          "columns": [
+            "email"
+          ],
+          "definition": "CREATE INDEX accounts_email_idx ON public.accounts USING btree (email)"
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('posts_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "member_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "posts_member_id_fkey",
+          "kind": "f",
+          "columns": [
+            "member_id"
+          ],
+          "ref_table": "accounts",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (member_id) REFERENCES accounts(id)"
+        },
+        {
+          "name": "posts_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "views": [],
+  "source": "table_rename_after.sql"
+}

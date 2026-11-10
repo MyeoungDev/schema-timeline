@@ -1,0 +1,6 @@
+out/
+__pycache__/
+*.pyc
+*.check.png
+.claude/
+.DS_Store

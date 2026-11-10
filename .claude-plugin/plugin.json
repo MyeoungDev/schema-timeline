@@ -1,0 +1,8 @@
+{
+  "name": "schema-timeline",
+  "version": "0.1.0",
+  "description": "Visualize database schema changes: replay migration history (Flyway, Supabase, Prisma, Drizzle, SQL files) in a throwaway PostgreSQL, MySQL, MariaDB or Oracle container and render a single offline HTML timeline with per-step review, ERD, lineage and full DDL.",
+  "author": { "name": "schema-timeline contributors" },
+  "license": "MIT",
+  "keywords": ["database", "migrations", "schema-diff", "schema-evolution", "erd", "flyway", "prisma", "supabase", "drizzle", "postgresql", "mysql", "oracle"]
+}

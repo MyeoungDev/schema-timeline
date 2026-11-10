@@ -1,0 +1,312 @@
+{
+  "tables": [
+    {
+      "name": "order_items",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('order_items_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "order_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "product_id",
+          "ordinal": 3,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "qty",
+          "ordinal": 4,
+          "type": "integer",
+          "nullable": false,
+          "default": "1",
+          "comment": null
+        },
+        {
+          "name": "price",
+          "ordinal": 5,
+          "type": "numeric(10,2)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "order_items_order_id_fkey",
+          "kind": "f",
+          "columns": [
+            "order_id"
+          ],
+          "ref_table": "orders",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (order_id) REFERENCES orders(id)"
+        },
+        {
+          "name": "order_items_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "order_items_product_id_fkey",
+          "kind": "f",
+          "columns": [
+            "product_id"
+          ],
+          "ref_table": "products",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (product_id) REFERENCES products(id)"
+        },
+        {
+          "name": "order_items_qty_check",
+          "kind": "c",
+          "columns": [
+            "qty"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "CHECK ((qty > 0))"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "orders",
+      "comment": "주문",
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('orders_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "user_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "status",
+          "ordinal": 3,
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'NEW'::character varying",
+          "comment": "주문 상태"
+        },
+        {
+          "name": "total",
+          "ordinal": 4,
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type": "timestamp without time zone",
+          "nullable": true,
+          "default": "now()",
+          "comment": null
+        },
+        {
+          "name": "shipped_at",
+          "ordinal": 6,
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "orders_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "orders_user_id_fkey",
+          "kind": "f",
+          "columns": [
+            "user_id"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_orders_status",
+          "unique": false,
+          "columns": [
+            "status"
+          ],
+          "definition": "CREATE INDEX idx_orders_status ON public.orders USING btree (status)"
+        },
+        {
+          "name": "idx_orders_user",
+          "unique": false,
+          "columns": [
+            "user_id"
+          ],
+          "definition": "CREATE INDEX idx_orders_user ON public.orders USING btree (user_id)"
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('products_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "name",
+          "ordinal": 2,
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "price",
+          "ordinal": 3,
+          "type": "numeric(10,2)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "products_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "users",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('users_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "email",
+          "ordinal": 2,
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "name",
+          "ordinal": 3,
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "phone",
+          "ordinal": 4,
+          "type": "character varying(20)",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type": "timestamp without time zone",
+          "nullable": true,
+          "default": "now()",
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "users_email_key",
+          "kind": "u",
+          "columns": [
+            "email"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "UNIQUE (email)"
+        },
+        {
+          "name": "users_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "views": [
+    {
+      "name": "order_summary",
+      "definition": " SELECT o.id,\n    o.user_id,\n    o.status,\n    count(i.id) AS item_count\n   FROM (orders o\n     LEFT JOIN order_items i ON ((i.order_id = o.id)))\n  GROUP BY o.id, o.user_id, o.status;"
+    }
+  ],
+  "source": "v2.sql"
+}

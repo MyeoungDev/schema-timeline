@@ -1,0 +1,105 @@
+{
+  "tables": [
+    {
+      "name": "c",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "u_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "c_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "c_u_id_fkey",
+          "kind": "f",
+          "columns": [
+            "u_id"
+          ],
+          "ref_table": "u",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (u_id) REFERENCES u(id)"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "u",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "u1",
+          "ordinal": 2,
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "u2",
+          "ordinal": 3,
+          "type": "integer",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "u_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix",
+          "unique": false,
+          "columns": [
+            "u1"
+          ],
+          "definition": "CREATE INDEX ix ON public.u USING btree (u1)"
+        }
+      ]
+    }
+  ],
+  "views": [],
+  "source": "fk_index_before.sql"
+}

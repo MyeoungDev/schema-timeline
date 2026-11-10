@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스키마 이력</title>
+<style>
+/*__TOKENS__*/
+/*__SQLVIEW_CSS__*/
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 0.9375rem/1.6 var(--font); word-break: keep-all; overflow-wrap: anywhere;
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+button { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); font-size: 0.875rem; }
+
+/* 상단 막대 */
+.topbar { border-bottom: 1px solid var(--border); background: var(--bg-muted); padding: 0 20px; display: flex; align-items: center; gap: 14px; min-height: 52px; flex-wrap: wrap; }
+.topbar h1 { font-size: 1.0625rem; font-weight: 600; margin: 0; }
+.topbar .meta { color: var(--fg-muted); font-size: 0.875rem; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); overflow: hidden; }
+.seg button { border: 0; background: none; padding: 3px 12px; font-size: 0.875rem; cursor: pointer; line-height: 20px; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--bg-muted); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+kbd { font: 0.75rem/1 var(--font); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; color: var(--fg-muted); background: var(--bg); }
+
+/* 전체 검색 */
+.pal-open { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 13rem; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg-muted); padding: 3px 6px 3px 10px; font-size: 0.875rem; cursor: pointer; line-height: 20px; }
+.pal-open:hover { border-color: var(--fg-muted); }
+.pal-open .lbl { flex: 1; text-align: left; }
+dialog.pal { width: min(640px, calc(100vw - 24px)); max-height: min(72vh, 600px); margin: 12vh auto auto; padding: 0; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--bg); color: var(--fg); box-shadow: 0 18px 48px rgb(0 0 0 / 0.28); overflow: hidden; }
+dialog.pal[open] { display: flex; flex-direction: column; }
+dialog.pal::backdrop { background: rgb(0 0 0 / 0.35); }
+.pal-in { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg-muted); }
+.pal-in input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--fg); font: 1rem var(--font); padding: 4px 0; }
+.pal-list { overflow-y: auto; min-height: 0; flex: 1; padding: 4px 0 8px; }
+.pal-group { padding: 10px 14px 4px; font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); display: flex; gap: 6px; }
+.pal-group .more { font-weight: 400; }
+.po { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; padding: 6px 14px; margin: 0 6px; border-radius: 6px; cursor: pointer; align-items: baseline; }
+.po[aria-selected="true"] { background: var(--accent-muted); box-shadow: inset 3px 0 var(--accent); }
+.po .pt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9375rem; }
+.po .pt.ptc { font: 0.875rem var(--mono); }
+.po .pr { font: 600 0.75rem var(--mono); color: var(--fg-muted); white-space: nowrap; }
+.po .pr.loss { color: var(--danger); }
+.po .pm { grid-column: 1 / -1; font-size: 0.7812rem; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po mark { background: none; color: var(--accent); font-weight: 700; }
+.po .tbl { color: var(--fg-muted); }
+.pal-empty { padding: 20px 14px; color: var(--fg-muted); font-size: 0.875rem; }
+.pal-foot { display: flex; gap: 14px; align-items: center; padding: 7px 14px; border-top: 1px solid var(--border); background: var(--bg-muted); font-size: 0.75rem; color: var(--fg-muted); flex-wrap: wrap; }
+.pal-foot .cnt { margin-left: auto; }
+.sql-src .cl.found { background: var(--attention-muted); box-shadow: inset 3px 0 var(--attention); }
+.po.more .pt { color: var(--accent); font-size: 0.8125rem; }
+@media (pointer: coarse) { .pal-key { display: none; } }
+@media (max-width: 600px) {
+  .pal-open { min-width: 0; }
+  .pal-open .lbl, .pal-foot .keys { display: none; }
+  dialog.pal { margin-top: 8px; max-height: calc(100vh - 16px); }
+}
+
+/* 타임라인 */
+.strip { border-bottom: 1px solid var(--border); padding: 12px 20px 10px; }
+/* DDL 두 개 비교: 단계가 하나뿐이라 버전 막대를 숨긴다 */
+body.compare { grid-template-rows: auto minmax(0, 1fr); }
+body.compare .strip { display: none; }
+.strip-head { display: flex; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.strip-head h2 { font-size: 0.875rem; font-weight: 600; margin: 0; white-space: nowrap; }
+.strip-head .hint { color: var(--fg-muted); font-size: 0.8125rem; }
+@media (pointer: coarse) { .strip-head .hint-k { display: none; } }
+.steps { display: flex; gap: 2px; overflow-x: auto; padding-bottom: 4px; align-items: flex-end; }
+.st { flex: 0 0 auto; min-width: 3.5rem; display: grid; grid-template-rows: 44px auto auto; justify-items: center; gap: 3px;
+  border: 1px solid transparent; border-radius: 6px; background: none; padding: 4px 6px 3px; cursor: pointer; }
+.st:hover { background: var(--bg-muted); }
+.st[aria-current="step"] { border-color: var(--accent); background: var(--accent-muted); }
+.st { --bar-max: 44px; }
+.st .bar { align-self: end; width: 14px; border-radius: 2px 2px 0 0; background: var(--neutral-emph); height: max(3px, calc(var(--r) * var(--bar-max))); }
+.st.failed .bar, .st.not_run .bar { height: 4px; }
+.st .bar.loss { background: var(--danger); }
+.st .bar.has { background: var(--accent); }
+.st .v { font-family: var(--mono); font-size: 0.8125rem; font-weight: 600; }
+.st .marks { display: flex; gap: 3px; height: 14px; align-items: center; }
+.mk { font-size: 0.75rem; font-weight: 600; line-height: 14px; padding: 0 4px; border-radius: 7px; border: 1px solid; }
+.mk-dml { color: var(--fg-muted); border-color: var(--border); }
+.mk-fail { color: var(--danger); border-color: var(--danger); }
+.mk-loss { color: #fff; background: var(--danger-solid); border-color: var(--danger-solid); padding: 0 5px; }
+.st.failed .v { color: var(--danger); }
+.st.not_run .v { color: var(--fg-muted); font-weight: 400; }
+.st.in-range { background: var(--accent-muted); border-radius: 0; }
+.st.in-range.r-start { border-radius: 6px 0 0 6px; border-left-color: var(--accent); }
+.st.in-range.r-end { border-radius: 0 6px 6px 0; border-right-color: var(--accent); }
+.range-ctl { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--fg-muted); flex-wrap: wrap; }
+.range-ctl[hidden] { display: none; }
+.range-ctl select { max-width: 15rem; font: 0.8125rem var(--font); color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; }
+.btn-s { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-muted); color: var(--fg); padding: 2px 10px; font-size: 0.8125rem; cursor: pointer; }
+.btn-s[hidden] { display: none; }
+.btn-s:disabled { opacity: 0.5; cursor: default; }
+.r-toggle { display: none; }
+.range-steps { margin: 8px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.range-steps li + li { border-top: 1px solid var(--border-muted); }
+.range-steps button { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; gap: 8px; width: 100%; text-align: left; border: 0; background: none; padding: 4px 10px; cursor: pointer; font-size: 0.875rem; }
+.range-steps button:hover { background: var(--bg-muted); }
+.range-steps .rv { font: 600 0.8125rem var(--mono); }
+.range-steps .rs { color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.range-steps .rn { font: 0.7812rem var(--mono); color: var(--fg-muted); }
+.range-steps .rn.loss { color: var(--danger); }
+.notice { margin-top: 8px; font-size: 0.875rem; color: var(--attention); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 본문 */
+.body { display: grid; grid-template-columns: 20rem minmax(0, 1fr); min-height: 0; }
+aside { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tabs button { flex: 1; border: 0; background: none; padding: 8px 6px; font-size: 0.875rem; cursor: pointer; color: var(--fg-muted); border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--fg); font-weight: 600; border-bottom-color: var(--accent); }
+.pane { overflow-y: auto; min-height: 0; flex: 1; }
+.pane[hidden] { display: none; }
+.search { margin: 10px; width: calc(100% - 20px); padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-muted); color: var(--fg); font: 0.875rem var(--font); }
+.sub-head { padding: 2px 12px 6px; font-size: 0.8125rem; color: var(--fg-muted); }
+.tl { list-style: none; margin: 0; padding: 0 0 12px; }
+.tl details > summary { list-style: none; display: grid; grid-template-columns: 14px 16px minmax(0, 1fr) auto; gap: 4px; align-items: center;
+  padding: 3px 12px 3px 8px; cursor: pointer; font-size: 0.875rem; }
+.tl details > summary::-webkit-details-marker { display: none; }
+.tl details > summary:hover { background: var(--bg-muted); }
+.tl .chev { color: var(--fg-muted); transition: transform .15s; }
+.tl details[open] .chev { transform: rotate(90deg); }
+.sg { font-family: var(--mono); font-weight: 600; text-align: center; }
+.sg-added { color: var(--success); } .sg-dropped { color: var(--danger); } .sg-changed, .sg-renamed { color: var(--attention); }
+.tl .tn { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl .cnt { color: var(--fg-muted); font-size: 0.7812rem; }
+.cols { list-style: none; margin: 0 0 4px; padding: 0; }
+.cols button { width: 100%; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 4px; align-items: center; border: 0; background: none;
+  padding: 2px 12px 2px 30px; text-align: left; cursor: pointer; font-size: 0.8125rem; }
+.cols button:hover { background: var(--bg-muted); }
+.cols .cn { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cols .ct { font-family: var(--mono); font-size: 0.75rem; color: var(--fg-muted); white-space: nowrap; }
+.tbl-acts { display: flex; gap: 12px; padding: 2px 12px 6px 30px; }
+.tbl-lin { border: 0; background: none; color: var(--accent); font-size: 0.8125rem; padding: 0; cursor: pointer; }
+.empty { padding: 12px; color: var(--fg-muted); font-size: 0.875rem; }
+.sub-head { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); border-radius: 2em; background: var(--bg); color: var(--fg-muted); padding: 0 8px; font-size: 0.75rem; line-height: 18px; cursor: pointer; }
+.chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-muted); font-weight: 600; }
+.aside-toggle { display: none; }
+.link-btn { border: 0; background: none; color: var(--accent); padding: 0; font-size: inherit; cursor: pointer; text-decoration: underline; }
+.hit { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 12px; cursor: pointer; border-top: 1px solid var(--border-muted); }
+.hit:hover { background: var(--bg-muted); }
+.hit .hn { font-family: var(--mono); font-size: 0.875rem; font-weight: 600; }
+.hit .hm { display: block; font-size: 0.7812rem; color: var(--fg-muted); }
+
+/* 계보 */
+.lin { padding: 12px; }
+.lin h3 { font: 600 0.9375rem var(--mono); margin: 0 0 2px; }
+.lin .lk { font-size: 0.8125rem; color: var(--fg-muted); margin: 0 0 10px; }
+.lin .aka { font-size: 0.8125rem; color: var(--fg-muted); margin: 0 0 12px; }
+.lin ol { list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 2px solid var(--border); }
+.lin li { position: relative; padding: 0 0 12px 12px; }
+.lin li::before { content: ""; position: absolute; left: -7px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); border: 2px solid var(--fg-muted); }
+.lin li.k-add::before { border-color: var(--success); } .lin li.k-drop::before { border-color: var(--danger); background: var(--danger); }
+.lin li.k-ren::before { border-color: var(--attention); }
+.lin .ev-step { border: 1px solid var(--border); border-radius: 4px; background: var(--bg-muted); font: 600 0.7812rem var(--mono); padding: 0 5px; cursor: pointer; }
+.lin .ev-step:hover { border-color: var(--accent); }
+.lin .ev-txt { font-size: 0.875rem; margin-left: 6px; }
+.lin .ev-col { font-family: var(--mono); font-size: 0.8125rem; color: var(--fg-muted); }
+.badge { display: inline-flex; align-items: center; border: 1px solid; border-radius: 2em; padding: 0 6px; font-size: 0.75rem; font-weight: 500; line-height: 16px; margin-left: 4px; }
+.b-ok { color: var(--success); border-color: var(--success); }
+.b-sus { color: var(--attention); border-color: var(--attention); }
+.b-dml { color: var(--fg-muted); border-color: var(--border); }
+.b-fail { color: var(--danger); border-color: var(--danger); }
+.b-loss { color: var(--danger); border-color: var(--danger); }
+
+/* 단계 상세 */
+main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.detail { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); }
+.detail h2 { font-size: 1.0625rem; font-weight: 600; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.detail h2 .file { font: 0.875rem var(--mono); color: var(--fg-muted); font-weight: 400; }
+.detail .summary { margin: 6px 0 0; max-width: 80ch; }
+.detail .summary.none { color: var(--fg-muted); font-size: 0.875rem; }
+.detail details { margin-top: 8px; }
+.detail details summary { cursor: pointer; font-size: 0.875rem; color: var(--accent); }
+.sql-src { position: relative; margin-top: 8px; max-height: 280px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; font: 0.875rem/1.6 var(--mono); }
+.sql-src .cl { display: grid; grid-template-columns: 3rem minmax(0, 1fr); min-width: max-content; }
+.detail pre { margin: 8px 0 0; max-height: 280px; overflow: auto; background: var(--bg-muted); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 12px; font: 0.875rem/1.6 var(--mono); white-space: pre-wrap; }
+.error { margin-top: 10px; border: 1px solid var(--danger); background: var(--danger-muted); border-radius: 6px; padding: 10px 12px; }
+.error b { color: var(--danger); }
+.error pre { background: transparent; border: 0; padding: 0; max-height: none; }
+.frame { flex: 1; min-height: 0; border: 0; width: 100%; background: var(--bg); }
+.frame[hidden], .ddl-all[hidden] { display: none; }
+.ddl-all { flex: 1; min-height: 0; overflow: auto; padding: 14px 20px 24px; }
+.ddl-all .editor-bar .btn { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); padding: 2px 10px; font-size: 0.8125rem; cursor: pointer; }
+.ddl-all .code-plain { font: 0.875rem/1.6 var(--mono); overflow-x: auto; }
+.ddl-all .code-plain .cl { display: grid; min-width: max-content; }
+.ddl-all .obj.touched .cn { box-shadow: inset 3px 0 var(--attention); }
+.ddl-all .obj.touched > .cl:first-child code::after { content: "  바뀜"; color: var(--attention); font: 600 0.75rem var(--font); }
+html[lang="en"] .ddl-all .obj.touched > .cl:first-child code::after { content: "  changed"; }
+.ddl-all .obj:focus { outline: none; }
+.ddl-all .obj:focus-visible { outline: 2px solid var(--accent); }
+.ddl-all .obj { scroll-margin-top: 8px; }
+.ddl-note { color: var(--fg-muted); font-size: 0.8125rem; margin: 8px 0 0; }
+.view-seg { margin-left: auto; }
+.detail-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.none-step { padding: 24px 20px; color: var(--fg-muted); }
+
+@media (max-width: 900px) {
+  body { display: block; height: auto; }
+  .body { grid-template-columns: minmax(0, 1fr); }
+  aside { border-right: 0; border-bottom: 1px solid var(--border); max-height: 50vh; }
+  .frame { height: 85vh; flex: none; }
+  .topbar, .strip, .detail { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 700px) {
+  .topbar { padding-top: 6px; padding-bottom: 6px; gap: 6px 10px; }
+  .topbar { flex-wrap: wrap; }
+  .topbar h1 { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .meta { flex: 1 1 100%; order: 1; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pal-open { margin-left: 0; }
+  .strip { padding-top: 8px; }
+  aside { max-height: none; }
+  .aside-toggle { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: var(--bg-muted); padding: 10px 16px; font-size: 0.875rem; font-weight: 600; cursor: pointer; text-align: left; min-height: 44px; }
+  .aside-toggle .chev { transition: transform .15s; }
+  aside.open .aside-toggle .chev { transform: rotate(90deg); }
+  aside:not(.open) .tabs, aside:not(.open) .pane { display: none; }
+  aside.open .pane { max-height: 60vh; }
+  .detail { padding-top: 10px; }
+  .seg.size, .strip-head .hint, .detail h2 .file { display: none; }
+  .seg button { padding: 3px 9px; }
+  .topbar h1 { font-size: 1rem; }
+  .strip { padding-bottom: 6px; }
+  .strip-head { margin-bottom: 4px; }
+  .st { --bar-max: 28px; grid-template-rows: 28px auto auto; min-width: 3rem; padding: 2px 4px; }
+  .detail .summary { font-size: 0.875rem; margin-top: 4px; }
+  .detail details { margin-top: 4px; }
+  .r-toggle { display: inline-block; }
+  .range-ctl { margin-left: 0; }
+  .range-ctl:not(.open) > :not(.r-toggle), .range-ctl.open .r-label { display: none; }
+  .range-ctl select { max-width: 42vw; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1 data-en="Schema history">스키마 이력</h1>
+  <span class="meta" id="meta"></span>
+  <button class="pal-open" id="pal-open" aria-haspopup="dialog" aria-label="전체 검색" data-en-aria-label="Search" aria-keyshortcuts="Meta+K Control+K">
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.68 11.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z"/></svg>
+    <span class="lbl" data-en="Search">전체 검색</span><kbd class="pal-key" aria-hidden="true">⌘K</kbd></button>
+  <div class="seg size" role="group" aria-label="글자 크기" data-en-aria-label="Text size">
+    <button data-size="s" aria-pressed="false" title="글자 작게" data-en-title="Small text" data-en="Small">작게</button>
+    <button data-size="m" aria-pressed="true" title="글자 보통" data-en-title="Medium text" data-en="Medium">보통</button>
+    <button data-size="l" aria-pressed="false" title="글자 크게" data-en-title="Large text" data-en="Large">크게</button>
+  </div>
+  <div class="seg theme" role="group" aria-label="테마" data-en-aria-label="Theme">
+    <button data-theme="auto" aria-pressed="true" data-en="Auto">자동</button>
+    <button data-theme="light" aria-pressed="false" data-en="Light">라이트</button>
+    <button data-theme="dark" aria-pressed="false" data-en="Dark">다크</button>
+  </div>
+</header>
+
+<section class="strip" aria-labelledby="strip-title">
+  <div class="strip-head"><h2 id="strip-title" data-en="Versions">버전</h2><span class="hint"><span data-en="Bar height = changes · red ! = may lose data">막대 높이 = 변경 건수 · 빨간 ! = 데이터 유실 가능</span><span class="hint-k" data-en=" · ← → move · Shift+click for a range"> · ← → 이동 · Shift+클릭으로 구간</span></span>
+    <div class="range-ctl" id="range-ctl" hidden>
+      <button class="btn-s r-toggle" id="r-toggle" aria-expanded="false" data-en="Compare range">구간 비교</button>
+      <span class="r-label" data-en="Compare range">구간 비교</span>
+      <select id="r-a" aria-label="구간 시작 단계(이 단계 적용 전부터)" data-en-aria-label="Range start step (from before this step)"></select><span aria-hidden="true">~</span><select id="r-b" aria-label="구간 끝 단계" data-en-aria-label="Range end step"></select>
+      <button class="btn-s" id="r-go" data-en="Compare">비교</button><button class="btn-s" id="r-clear" hidden data-en="Clear range">구간 해제</button>
+    </div></div>
+  <div class="steps" id="steps" role="toolbar" aria-label="버전 선택" data-en-aria-label="Select version"></div>
+</section>
+
+<div class="body">
+  <aside id="aside">
+    <button class="aside-toggle" id="aside-toggle" aria-expanded="false" aria-controls="pane-tables pane-lin"></button>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-tables" aria-selected="true" aria-controls="pane-tables" data-en="Tables">테이블</button>
+      <button role="tab" id="tab-lin" aria-selected="false" aria-controls="pane-lin" tabindex="-1" data-en="Lineage">계보</button>
+    </div>
+    <div class="pane" id="pane-tables" role="tabpanel" aria-labelledby="tab-tables">
+      <input type="search" class="search" id="q" placeholder="테이블·컬럼 이름 (옛 이름 포함)" aria-label="테이블·컬럼 이름으로 전 버전 검색"
+        data-en-placeholder="Table or column (incl. old names)" data-en-aria-label="Search all versions by table or column name">
+      <div id="tables"></div>
+    </div>
+    <div class="pane" id="pane-lin" role="tabpanel" aria-labelledby="tab-lin" hidden>
+      <div class="lin" id="lin"><p class="empty" data-en="Select a table or column to see its changes from creation to now.">테이블이나 컬럼을 고르면 생성부터 지금까지의 변경을 보여 줍니다.</p></div>
+    </div>
+  </aside>
+  <main>
+    <div class="detail" id="detail"></div>
+    <iframe class="frame" id="frame" title="선택한 버전의 변경 내용" data-en-title="Changes at the selected version" allow="fullscreen *" allowfullscreen></iframe>
+    <div class="ddl-all" id="ddl-all" hidden></div>
+  </main>
+</div>
+
+<dialog class="pal" id="pal" aria-label="전체 검색" data-en-aria-label="Search">
+  <div class="pal-in">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.68 11.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z"/></svg>
+    <input id="pal-q" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"
+      placeholder="버전·테이블·컬럼·SQL 원문·명령" aria-label="버전, 테이블, 컬럼, SQL 원문, 명령 검색"
+      data-en-placeholder="Versions, tables, columns, SQL source, commands" data-en-aria-label="Search versions, tables, columns, SQL source, and commands">
+    <kbd aria-hidden="true">esc</kbd>
+  </div>
+  <div class="pal-list" id="pal-list" role="listbox" aria-label="검색 결과" data-en-aria-label="Search results"></div>
+  <div class="pal-foot"><span class="keys"><kbd>↑</kbd> <kbd>↓</kbd> <span data-en="Move">이동</span></span><span class="keys"><kbd>Enter</kbd> <span data-en="Open">열기</span></span><span class="keys"><kbd>esc</kbd> <span data-en="Close">닫기</span></span>
+    <span class="cnt" id="pal-count" aria-live="polite"></span></div>
+</dialog>
+
+<p class="sr-only" id="announce" aria-live="polite"></p>
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+/*__SQLVIEW_JS__*/
+/*__DIFF_JS__*/
+const D = JSON.parse(document.getElementById('data').textContent);
+const N = D.steps.length;
+const state = { step: null, lin: null, view: 'diff' };
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const shortType = t => t == null ? '' : String(t)
+  .replace(/character varying/g, 'varchar').replace(/^character\(/, 'char(')
+  .replace(/timestamp without time zone/g, 'timestamp').replace(/timestamp with time zone/g, 'timestamptz')
+  .replace(/^integer$/, 'int').replace(/^boolean$/, 'bool').replace(/^double precision$/, 'float8');
+const SIGN = { added: '+', dropped: '−', changed: 'Δ', renamed: '↻', same: '' };
+const STATUS_NAME = { added: () => L('추가', 'Added'), dropped: () => L('삭제', 'Dropped'), changed: () => L('변경', 'Changed'), renamed: () => L('이름 변경', 'Renamed') };
+const STEP_STATE = { failed: L('적용 실패', 'Failed'), not_run: L('앞 단계 실패로 적용하지 않음', 'Not run (an earlier step failed)') };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/** 변경 건수. */
+const cnt = n => L(`${n}건`, plural(n, 'change', 'changes'));
+const chg = n => L(`변경 ${n}건`, plural(n, 'change', 'changes'));
+const nstep = n => L(`${n}단계`, plural(n, 'step', 'steps'));
+const afterOf = v => L(`${vlabel(v)} 적용 후`, `After ${vlabel(v)}`);
+const scopeName = () => state.range ? L('이 구간', 'this range') : L('이 버전', 'this version');
+const lifeSpan = e => `${vlabel(e.created)} ~ ${e.dropped != null ? L(`${vlabel(e.dropped)} 삭제`, `${vlabel(e.dropped)} dropped`) : L('현재', 'now')}`;
+const vlabel = i => i === 0 ? (D.base_label || 'V0') : (D.steps[i - 1].label || `V${D.steps[i - 1].version}`);
+/** 단계 i 의 diff. 참조로 줄여 둔 변경 없는 테이블을 펼친다. */
+const diffOf = i => { const d = D.diffs[i - 1]; return d ? { ...d, tables: d.tables.map(t => t.$ref ? D.defs[t.$ref] : t) } : null; };
+const APPLIED = D.steps.filter(s => s.status === 'applied').length;
+const canRange = () => (D.snaps || []).length === APPLIED + 1 && APPLIED >= 2;
+const snapOf = i => { const s = D.snaps[i]; return { ...s, tables: s.tables.map(t => t.$ref ? D.defs[t.$ref] : t) }; };
+const rangeCache = new Map();
+/** a 단계 적용 전부터 b 단계 적용 후까지의 변경. 두 스냅샷을 브라우저에서 비교한다(templates/diff.js). */
+function rangeDiff(a, b) {
+  const key = `${a}-${b}`;
+  if (rangeCache.has(key)) {
+    const hit = rangeCache.get(key);
+    rangeCache.delete(key);
+    rangeCache.set(key, hit);
+  } else {
+    const before = snapOf(a - 1), after = snapOf(b);
+    const d = attachIds(schemaDiff(before, after), before, after);
+    d.before.source = a === 1 ? (D.base_source || L('V0 (빈 DB)', 'V0 (empty database)')) : afterOf(a - 1);
+    d.after.source = afterOf(b);
+    if (before.replay_id && before.replay_id === after.replay_id) d.mode = 'replay';
+    d.schema = D.diffs[b - 1].schema;
+    rangeCache.set(key, d);
+    if (rangeCache.size > 20) rangeCache.delete(rangeCache.keys().next().value);
+  }
+  return rangeCache.get(key);
+}
+/** 지금 보고 있는 변경: 구간이면 구간 비교, 아니면 선택한 단계. */
+const currentDiff = () => state.range ? rangeDiff(state.range.a, state.range.b) : diffOf(state.step);
+const LIN = D.lineage;
+const CHEV = '<svg class="chev" width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>';
+
+/* ---------- 타임라인 ---------- */
+
+function renderSteps() {
+  const max = Math.max(1, ...D.steps.map(s => s.event_count || 0));
+  document.getElementById('steps').innerHTML = D.steps.map((s, k) => {
+    const i = k + 1, n = s.event_count || 0;
+    const r = s.status !== 'applied' ? 0 : Math.sqrt(n / max).toFixed(3);
+    const cls = s.data_loss ? 'loss' : n ? 'has' : '';
+    const marks = (s.data_loss ? `<span class="mk mk-loss" aria-hidden="true">!</span>` : '') + (s.dml ? `<span class="mk mk-dml" title="${L('DML 포함', 'Contains DML')}">DML</span>` : '') + (s.status === 'failed' ? `<span class="mk mk-fail">${L('실패', 'Failed')}</span>` : '')
+      + (s.status === 'not_run' ? `<span class="mk mk-dml">${L('미적용', 'Not run')}</span>` : '');
+    const label = `${vlabel(i)} ${s.description}, ${STEP_STATE[s.status] || chg(n)}${s.data_loss ? `, ${L('데이터 유실 가능', 'May lose data')}` : ''}${s.dml ? `, ${L('DML 포함', 'Contains DML')}` : ''}`;
+    return `<button class="st ${s.status}" data-i="${i}" tabindex="-1" aria-label="${esc(label)}" title="${esc(`${vlabel(i)} ${s.description}\n${STEP_STATE[s.status] || chg(n)}${s.data_loss ? ` · ${L('데이터 유실 가능', 'May lose data')}` : ''}\n${s.file}`)}">
+      <span class="bar ${cls}" style="--r:${r}"></span><span class="v">${esc(vlabel(i))}</span><span class="marks">${marks}</span></button>`;
+  }).join('');
+  const box = document.getElementById('steps');
+  box.querySelectorAll('.st').forEach(b => b.addEventListener('click', e => e.shiftKey ? extendRange(+b.dataset.i) : select(+b.dataset.i)));
+  box.addEventListener('keydown', e => {
+    const d = { ArrowLeft: -1, ArrowRight: 1, Home: -N, End: N }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const cur = state.range ? state.range.edge : state.step;
+    if (e.shiftKey && cur > APPLIED) {
+      document.getElementById('announce').textContent = L('적용되지 않은 단계는 구간에 넣을 수 없습니다.', 'Steps that were not run cannot be part of a range.');
+    } else if (e.shiftKey) extendRange(Math.min(APPLIED, Math.max(1, cur + d)), true);
+    else select(Math.min(N, Math.max(1, cur + d)), true);
+  });
+  if (!canRange()) return;
+  const opts = D.steps.slice(0, APPLIED).map((s, k) => `<option value="${k + 1}">${esc(vlabel(k + 1))} ${esc(s.description.slice(0, 40))}</option>`).join('');
+  document.getElementById('r-a').innerHTML = opts;
+  document.getElementById('r-b').innerHTML = opts;
+  document.getElementById('range-ctl').hidden = false;
+  document.getElementById('r-a').addEventListener('change', syncRangeGo);
+  document.getElementById('r-b').addEventListener('change', syncRangeGo);
+  document.getElementById('r-go').addEventListener('click', () => {
+    const x = +document.getElementById('r-a').value, y = +document.getElementById('r-b').value;
+    if (x === y) select(x); else selectRange(Math.min(x, y), Math.max(x, y), Math.min(x, y));
+  });
+  document.getElementById('r-clear').addEventListener('click', () => select(state.range.edge, true));
+  document.getElementById('r-toggle').addEventListener('click', () => setRangeOpen(!document.getElementById('range-ctl').classList.contains('open')));
+}
+
+/** Shift+클릭·Shift+화살표: 기준 단계(anchor)에서 j 까지로 구간을 넓히거나 줄인다. */
+function extendRange(j, focus = false) {
+  if (!canRange()) return select(j, focus);
+  if (j > APPLIED) {
+    document.getElementById('announce').textContent = L('적용되지 않은 단계는 구간에 넣을 수 없습니다.', 'Steps that were not run cannot be part of a range.');
+    return;
+  }
+  const anchor = state.range ? state.range.anchor : Math.min(state.step, APPLIED);
+  if (anchor === j) return select(j, focus);
+  selectRange(Math.min(anchor, j), Math.max(anchor, j), anchor, focus, j);
+}
+
+/** a~b 단계를 합친 변경을 본다. */
+function selectRange(a, b, anchor, focus = false, edge = b) {
+  state.range = { a, b, anchor, edge };
+  state.step = b;
+  paintStrip(edge, focus);
+  writeHash();
+  renderDetail();
+  renderTables();
+  if (state.lin) renderLineage(state.lin, false);
+  const d = currentDiff();
+  document.getElementById('announce').textContent = L(`${vlabel(a)}부터 ${vlabel(b)}까지 ${b - a + 1}단계 구간. 변경 ${d.events.length}건`, `${vlabel(a)} to ${vlabel(b)}, ${nstep(b - a + 1)}. ${chg(d.events.length)}`);
+}
+
+/** 버전 막대의 선택·구간 표시를 맞춘다. edge 는 키보드 포커스를 둘 막대다. */
+function paintStrip(edge, focus) {
+  const r = state.range;
+  document.querySelectorAll('.st').forEach(btn => {
+    const i = +btn.dataset.i, inR = r && i >= r.a && i <= r.b;
+    btn.classList.toggle('in-range', !!inR);
+    btn.classList.toggle('r-start', !!r && i === r.a);
+    btn.classList.toggle('r-end', !!r && i === r.b);
+    if (i === state.step) btn.setAttribute('aria-current', 'step'); else btn.removeAttribute('aria-current');
+    btn.dataset.base ||= btn.getAttribute('aria-label');
+    btn.setAttribute('aria-label', btn.dataset.base + (inR ? L(', 비교 구간에 포함', ', in compare range') : ''));
+    btn.tabIndex = i === edge ? 0 : -1;
+    if (i === edge) { btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); if (focus) btn.focus(); }
+  });
+  if (!canRange()) return;
+  const cur = Math.min(state.step, APPLIED);
+  document.getElementById('r-a').value = String(r ? r.a : cur < APPLIED ? cur : 1);
+  document.getElementById('r-b').value = String(r ? r.b : APPLIED);
+  document.getElementById('r-clear').hidden = !r;
+  if (r) setRangeOpen(true);
+  syncRangeGo();
+}
+
+/** 좁은 화면에서 접어 두는 구간 비교 칸을 펼치거나 접는다. */
+function setRangeOpen(open) {
+  document.getElementById('range-ctl').classList.toggle('open', open);
+  document.getElementById('r-toggle').setAttribute('aria-expanded', String(open));
+}
+
+/** 구간 시작과 끝이 같으면 비교 버튼을 끈다. */
+function syncRangeGo() {
+  const a = document.getElementById('r-a').value, b = document.getElementById('r-b').value;
+  document.getElementById('r-go').disabled = a === b;
+}
+
+/** 단계 하나를 고른다. 타임라인·테이블 목록·상세·변경 화면이 함께 바뀐다. */
+function select(i, focus = false) {
+  state.step = i;
+  state.range = null;
+  paintStrip(i, focus);
+  writeHash();
+  renderDetail();
+  renderTables();
+  if (state.lin) renderLineage(state.lin, false);
+  const s = D.steps[i - 1];
+  document.getElementById('announce').textContent = `${vlabel(i)} ${s.description}. ${STEP_STATE[s.status] || chg(s.event_count || 0)}`;
+}
+
+/* ---------- 단계 상세 ---------- */
+
+/** 구간 상세: 비교 기준, 포함된 단계 목록, 구간 변경 화면. */
+function renderRangeDetail() {
+  const { a, b } = state.range, d = currentDiff();
+  const steps = D.steps.slice(a - 1, b);
+  const loss = steps.filter(s => s.data_loss).length;
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><h2>${esc(vlabel(a))} ~ ${esc(vlabel(b))} · ${L(`${b - a + 1}단계 합친 변경`, `${nstep(b - a + 1)} combined`)}${loss ? `<span class="badge b-loss">${L(`데이터 유실 가능 단계 ${loss}개`, `May lose data: ${plural(loss, 'step', 'steps')}`)}</span>` : ''}</h2>
+      <div class="seg view-seg" role="group" aria-label="${L('보기 방식', 'View')}">
+        <button data-view="diff" aria-pressed="${state.view === 'diff'}">${L('구간 변경', 'Range changes')}</button>
+        <button data-view="ddl" aria-pressed="${state.view === 'ddl'}">${esc(L(`${vlabel(b)} 시점 전체 DDL`, `Full DDL at ${vlabel(b)}`))}</button>
+      </div></div>
+    <p class="summary">${esc(a === 1 ? (D.base_source || L('빈 DB', 'empty database')) : afterOf(a - 1))} → ${esc(afterOf(b))}${L('를 비교합니다', '')}. ${chg(d.events.length)}. ${L('구간 안에서 생겼다가 사라진 것은 나오지 않습니다.', 'Objects created and dropped within the range are not shown.')}${a === 1 && b >= 2 ? ` <button class="link-btn" id="r-after-first">${esc(L(`${afterOf(1)}부터 비교`, `Compare from after ${vlabel(1)}`))}</button>` : ''}</p>
+    ${objectNotice(mergeObjects(a, b))}
+    <details><summary>${L(`포함된 단계 ${b - a + 1}개`, `${nstep(b - a + 1)} included`)}</summary><ul class="range-steps">${steps.map((s, k) => {
+      const i = a + k, sum = D.summary?.[s.file];
+      return `<li><button data-step="${i}" title="${esc(sum || s.file)}"><span class="rv">${esc(vlabel(i))}</span><span class="rs">${esc(sum || s.description)}</span><span class="rn${s.data_loss ? ' loss' : ''}">${cnt(s.event_count || 0)}</span></button></li>`;
+    }).join('')}</ul></details>`;
+  document.querySelectorAll('.range-steps [data-step]').forEach(x => x.addEventListener('click', () => select(+x.dataset.step)));
+  document.getElementById('r-after-first')?.addEventListener('click', () => b > 2 ? selectRange(2, b, 2) : select(2));
+  document.querySelectorAll('.view-seg button').forEach(x => x.addEventListener('click', () => setView(x.dataset.view)));
+  showDiff(d);
+}
+
+/** 구간 안 단계의 객체 변경을 합친다. 구간 안에서 생겼다가 사라진 객체는 뺀다. 객체 정보가 없는 구간이면 null. */
+function mergeObjects(a, b) {
+  const key = o => `${o.type}|${o.name}`;
+  const added = new Map(), dropped = new Map(), invalid = new Map();
+  let changed = [], any = false;
+  for (let i = a; i <= b; i++) {
+    const o = D.steps[i - 1].objects;
+    if (!o) continue;
+    any = true;
+    const tag = x => ({ ...x, step: vlabel(i) });
+    const status = x => { if (x.status === 'VALID') invalid.delete(key(x)); else if (x.status === 'INVALID') invalid.set(key(x), tag(x)); };
+    for (const x of o.added || []) {
+      if (dropped.has(key(x))) { dropped.delete(key(x)); changed.push(tag(x)); } else added.set(key(x), tag(x));
+      status(x);
+    }
+    for (const x of o.dropped || []) {
+      invalid.delete(key(x));
+      changed = changed.filter(c => key(c) !== key(x));
+      if (added.has(key(x))) added.delete(key(x)); else dropped.set(key(x), tag(x));
+    }
+    for (const x of o.changed || []) { changed.push(tag(x)); status(x); }
+    for (const x of o.invalid || []) invalid.set(key(x), tag(x));
+  }
+  if (!any) return null;
+  changed = changed.filter(x => !added.has(key(x)));
+  return { added: [...added.values()], dropped: [...dropped.values()], changed, invalid: [...invalid.values()] };
+}
+
+/** 변경 화면에 함께 넘길 값: DDL 비교 밖의 객체 변경, 구간이면 포함된 단계 정보. */
+function frameExtras() {
+  const engine = engineOf();
+  if (!state.range) return { engine, objects: D.steps[state.step - 1]?.objects || null, sql: D.kind === 'compare' || D.sql_omitted ? null : (D.steps[state.step - 1]?.sql ?? null) };
+  const { a, b } = state.range;
+  return { engine, objects: mergeObjects(a, b),
+    range_steps: D.steps.slice(a - 1, b).map((s, k) => ({ step: a + k, label: vlabel(a + k), data_loss: !!s.data_loss, event_count: s.event_count || 0,
+      events: (diffOf(a + k)?.events || []).map(({ kind, table, column, before, after }) => ({ kind, table, column, before, after })) })) };
+}
+
+/** 변경 화면(iframe)이나 전체 DDL 을 보여 준다. */
+function showDiff(d) {
+  const frame = document.getElementById('frame'), all = document.getElementById('ddl-all');
+  if (state.view === 'ddl') { frame.hidden = true; all.hidden = false; renderSchemaDdl(); return; }
+  all.hidden = true;
+  if (!d) { frame.hidden = true; return; }
+  frame.hidden = false;
+  const data = { ...d, ...frameExtras(), embed: true, generated_at: D.generated_at };
+  frame.srcdoc = D.compare_template
+    .replace('<html lang="ko">', () => `<html lang="${UI_LANG}" data-theme="${currentTheme()}"${currentSize() ? ` data-size="${currentSize()}"` : ''}>`)
+    .replace('/*__' + 'DATA__*/', () => JSON.stringify(data).replace(/</g, '\\u003c'));
+  frame.onload = () => syncFrameTheme();
+}
+
+const OBJ_NAME = { TRIGGER: ['트리거', 'trigger'], FUNCTION: ['함수', 'function'], PROCEDURE: ['프로시저', 'procedure'], PACKAGE: ['패키지', 'package'], SEQUENCE: ['시퀀스', 'sequence'] };
+
+/** 단계의 DDL 밖 객체 변경을 한 줄로. 없으면 빈 문자열. */
+function objectNotice(o) {
+  if (!o) return `<p class="notice">${esc(L('기타 객체(트리거·함수 등)는 이 출력에서 확인하지 않았습니다. 다시 실행하면 포함됩니다.', 'Other objects (triggers, functions…) were not checked for this output. Re-run to include them.'))}</p>`;
+  const parts = [];
+  for (const [k, ko, en] of [['added', '추가', 'added'], ['dropped', '삭제', 'dropped'], ['changed', '변경', 'changed'], ['invalid', '컴파일 오류', 'invalid']]) {
+    const by = new Map();
+    for (const x of o[k] || []) by.set(x.type, (by.get(x.type) || 0) + 1);
+    for (const [t, n] of by) { const nm = OBJ_NAME[String(t).toUpperCase()] || [String(t).toLowerCase(), String(t).toLowerCase()]; parts.push(L(`${nm[0]} ${n}개 ${ko}`, `${n} ${nm[1]}${n === 1 ? '' : 's'} ${en}`)); }
+  }
+  return parts.length ? `<p class="notice">${esc(L(`${parts.join(', ')}. 스키마 비교에는 나오지 않습니다.`, `${parts.join(', ')}. Not part of the schema diff.`))}</p>` : '';
+}
+
+function renderDetail() {
+  if (state.range) return renderRangeDetail();
+  const i = state.step, s = D.steps[i - 1], d = diffOf(i);
+  const summary = D.summary?.[s.file];
+  const badges = (s.dml ? `<span class="badge b-dml" title="${L('빈 DB 에서 재생했으므로 행 변경은 스키마 결과에 반영되지 않습니다', 'Replayed on an empty database, so row changes are not reflected in the schema result')}">${L('DML 포함', 'Contains DML')}</span>` : '')
+    + (s.data_loss ? `<span class="badge b-loss">${L('데이터 유실 가능', 'May lose data')}</span>` : '')
+    + (s.status === 'failed' ? `<span class="badge b-fail">${L('적용 실패', 'Failed')}</span>` : '');
+  document.getElementById('detail').innerHTML = `
+    <div class="detail-head"><h2>${D.kind === 'compare' ? esc(s.description) : `${esc(vlabel(i))} · ${esc(s.description)} <span class="file">${esc(s.file)}</span>`}${badges}</h2>
+      <div class="seg view-seg" role="group" aria-label="${L('보기 방식', 'View')}">
+        <button data-view="diff" aria-pressed="${state.view === 'diff'}">${L('변경 내용', 'Changes')}</button>
+        <button data-view="ddl" aria-pressed="${state.view === 'ddl'}">${L('이 시점 전체 DDL', 'Full DDL at this version')}</button>
+      </div></div>
+    ${summary ? `<p class="summary">${esc(summary)}</p>` : s.status === 'applied' ? `<p class="summary none">${chg(s.event_count || 0)}</p>` : ''}
+    ${s.status === 'failed' ? `<div class="error"><b>${L('이 단계에서 재생이 멈췄습니다.', 'Replay stopped at this step.')}</b> ${L('이후 버전은 만들지 못했습니다.', 'Later versions could not be built.')}<pre>${esc(s.error)}</pre></div>` : ''}
+    ${s.status === 'not_run' ? `<p class="notice">${L('앞 단계가 실패해 이 파일은 적용하지 않았습니다.', 'An earlier step failed, so this file was not run.')}</p>` : ''}
+    ${s.status === 'applied' ? objectNotice(s.objects) : ''}
+    ${(s.warnings || []).map(w => `<p class="notice">${esc(w)}</p>`).join('')}
+    <details><summary>${L('SQL 원문', 'SQL source')}</summary>${D.sql_omitted ? `<p class="notice">${esc(D.sql_omitted_note)}</p>` : `<div class="sql-src code-plain">${sqlPlainHtml(String(s.sql || '').replace(/\s+$/, ''))}</div>`}</details>`;
+  document.querySelectorAll('.view-seg button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  showDiff(d);
+}
+
+/** 변경 내용(iframe)과 이 시점 전체 DDL 사이를 바꾼다. */
+function setView(v) {
+  state.view = v;
+  renderDetail();
+  writeHash();
+  document.querySelector(`.view-seg [data-view="${v}"]`)?.focus();
+}
+
+function writeHash() {
+  const where = state.range ? `from=${state.range.a}&to=${state.range.b}` : `step=${state.step}`;
+  try { history.replaceState(null, '', `#${where}${state.lin ? `&id=${state.lin}` : ''}${state.view === 'ddl' ? '&view=ddl' : ''}`); } catch (e) {}
+}
+
+/** 선택한 버전 시점의 모든 테이블·뷰 CREATE 문. 이 버전에서 바뀐 객체는 줄 번호 옆에 표시를 붙인다. */
+function renderSchemaDdl() {
+  const i = state.step, d = currentDiff(), box = document.getElementById('ddl-all');
+  const scope = scopeName();
+  if (!d) { box.innerHTML = `<p class="none-step">${L('이 버전의 스키마는 만들지 못했습니다.', 'The schema for this version could not be built.')}</p>`; return; }
+  const changed = new Set([...d.tables, ...d.views].filter(x => x.status !== 'same').map(x => x.name));
+  const ids = new Map(d.tables.filter(t => t.status !== 'dropped').map(t => [t.name, t.id]));
+  const objs = (d.schema || []).map(o => o.$ref ? D.defs[o.$ref] : o).map((o, k) => ({
+    id: o.kind === 'table' ? ids.get(o.name) : `${o.kind}-${k}`, kind: o.kind, name: o.name, text: o.text, touched: changed.has(o.name),
+  }));
+  const full = objs.map(o => o.text).join('\n\n') + '\n';
+  let line = 1;
+  const body = objs.map(o => {
+    const html = sqlPlainHtml(o.text, line);
+    line += o.text.split('\n').length + 1;
+    return `<section class="obj${o.touched ? ' touched' : ''}" id="ddl-${esc(o.id)}" tabindex="-1" aria-label="${esc(o.name)}${o.touched ? L(`, ${scope}에서 바뀜`, `, changed in ${scope}`) : ''}">${html}<div class="cl"><span class="cn">${line - 1}</span><code> </code></div></section>`;
+  }).join('');
+  const file = `schema_${vlabel(i)}.sql`;
+  const tables = objs.filter(o => o.kind === 'table').length, views = objs.filter(o => o.kind === 'view').length,
+    types = objs.filter(o => o.kind === 'type').length;
+  box.innerHTML = `<div class="editor"><div class="editor-bar"><span class="editor-tab">${esc(file)}</span>
+      <span class="meta">${L('테이블', 'Tables')} ${tables} · ${L('뷰', 'Views')} ${views}${types ? ` · enum ${types}` : ''}${objs.some(o => o.touched) ? L(` · 노란 줄과 “바뀜” 표시: ${scope}에서 바뀐 객체`, ` · Yellow lines and “changed” mark objects changed in ${scope}`) : ''}</span>
+      <span class="acts"><button class="btn" id="ddl-copy">${L('복사', 'Copy')}</button><button class="btn" id="ddl-save">${L('.sql 저장', 'Save .sql')}</button></span></div>
+    <div class="code-plain">${body}</div></div>
+    <p class="ddl-note">${L('카탈로그에서 다시 만든 정의입니다. 원본 마이그레이션 파일과 글자 단위로 같지는 않습니다.', 'Definitions rebuilt from the catalog, so they are not identical to the original migration files character for character.')} ${ddlScopeNote(engineOf())}</p>`;
+  document.getElementById('ddl-copy').addEventListener('click', async e => {
+    const ok = await copyText(full);
+    e.target.textContent = ok ? L('복사했습니다', 'Copied') : L('복사하지 못했습니다', 'Could not copy');
+    setTimeout(() => { e.target.textContent = L('복사', 'Copy'); }, 2000);
+  });
+  document.getElementById('ddl-save').addEventListener('click', () => {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([full], { type: 'text/plain' })), download: file });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+}
+
+/** 지금 출력의 DB 엔진. */
+const engineOf = () => D.snaps?.[0]?.engine || D.diffs?.[0]?.engine || 'postgres';
+
+/** 전체 DDL 이 담는 객체와 담지 않는 객체. 엔진마다 다르다. */
+function ddlScopeNote(engine) {
+  if (engine === 'oracle') return L('테이블·제약·인덱스·뷰·코멘트만 담고, 시퀀스·트리거·프로시저·함수·패키지·시노님·권한은 담지 않습니다.', 'Only tables, constraints, indexes, views, and comments are included; sequences, triggers, procedures, functions, packages, synonyms, and grants are not.');
+  if (engine === 'mysql' || engine === 'mariadb') return L('테이블·제약·인덱스·뷰·코멘트만 담고, 트리거·저장 프로시저·함수·이벤트·권한은 담지 않습니다.', 'Only tables, constraints, indexes, views, and comments are included; triggers, stored procedures, functions, events, and grants are not.');
+  return L('테이블·제약·인덱스·뷰·코멘트·enum 타입·시퀀스만 담고, domain·함수·트리거·확장·권한은 담지 않습니다.', 'Only tables, constraints, indexes, views, comments, enum types, and sequences are included; domains, functions, triggers, extensions, and grants are not.');
+}
+
+function jumpDdl(id) {
+  if (state.view !== 'ddl') setView('ddl');
+  const el = document.getElementById(`ddl-${id}`);
+  if (el) { el.scrollIntoView({ block: 'start' }); el.focus({ preventScroll: true }); el.querySelector('.cl')?.animate?.([{ background: 'var(--accent-muted)' }, { background: 'transparent' }], 1600); }
+}
+
+/* ---------- 테이블 목록 ---------- */
+
+/** 선택한 버전 시점의 테이블과 컬럼. 이 버전에서 바뀐 것에 표시를 붙인다. */
+function renderTables() {
+  const box = document.getElementById('tables'), q = document.getElementById('q').value.trim().toLowerCase();
+  if (q) return renderSearch(q);
+  const d = currentDiff();
+  if (!d) { box.innerHTML = `<p class="empty">${L('이 버전의 스키마를 만들지 못했습니다.', 'The schema for this version could not be built.')}</p>`; return; }
+  const ORDER = { dropped: 0, added: 1, renamed: 2, changed: 3, same: 4 };
+  const all = [...d.tables].sort((a, b) => (ORDER[a.status] ?? 4) - (ORDER[b.status] ?? 4) || a.name.localeCompare(b.name));
+  const tables = all.filter(t => t.status !== 'dropped');
+  const dropped = all.filter(t => t.status === 'dropped');
+  const nChanged = all.filter(t => t.status !== 'same').length;
+  const shown = state.changedOnly ? all.filter(t => t.status !== 'same') : all;
+  const item = t => {
+    const cols = t.columns.filter(c => c.status !== 'dropped' || t.status === 'dropped');
+    return `<li><details${state.open?.has(t.id) ? ' open' : ''} data-id="${esc(t.id)}"><summary>${CHEV}<span class="sg sg-${t.status}"${STATUS_NAME[t.status] ? ` title="${esc(STATUS_NAME[t.status]())}"` : ''}>${SIGN[t.status]}</span><span class="tn">${esc(t.name)}</span><span class="cnt">${cols.length}</span></summary>
+      <span class="tbl-acts"><button class="tbl-lin" data-lin="${esc(t.id)}">${L('계보 보기', 'View lineage')}</button>${t.status !== 'dropped' ? `<button class="tbl-lin" data-ddl="${esc(t.id)}">${L('DDL 보기', 'View DDL')}</button>` : ''}</span>
+      <ul class="cols">${cols.map(c => {
+        const v = c.after || c.before;
+        return `<li><button data-lin="${esc(c.id)}" title="${esc(L(`${t.name}.${c.name} 계보 보기`, `View lineage of ${t.name}.${c.name}`))}"><span class="sg sg-${t.status === 'added' ? 'same' : c.status}">${t.status === 'added' ? '' : SIGN[c.status]}</span><span class="cn">${esc(c.name)}</span><span class="ct">${esc(shortType(v.type))}</span></button></li>`;
+      }).join('')}</ul></details></li>`;
+  };
+  box.innerHTML = `<div class="sub-head"><span>${esc(L(`${vlabel(state.step)} 시점 테이블 ${tables.length}개`, `${plural(tables.length, 'table', 'tables')} at ${vlabel(state.step)}`))}${dropped.length ? esc(L(` · ${scopeName()}에서 삭제 ${dropped.length}개`, ` · ${dropped.length} dropped in ${scopeName()}`)) : ''}</span>${nChanged ? `<button class="chip" id="changed-only" aria-pressed="${!!state.changedOnly}">${esc(L(`바뀐 것만 ${nChanged}`, `Changed only ${nChanged}`))}</button>` : ''}</div>
+    <ul class="tl">${shown.map(item).join('')}</ul>`;
+  document.getElementById('changed-only')?.addEventListener('click', () => { state.changedOnly = !state.changedOnly; renderTables(); document.getElementById('changed-only')?.focus(); });
+  syncAsideToggle(tables.length);
+  wireLineageButtons(box);
+  box.querySelectorAll('[data-ddl]').forEach(b => b.addEventListener('click', () => jumpDdl(b.dataset.ddl)));
+  box.querySelectorAll('details').forEach(el => el.addEventListener('toggle', () => {
+    state.open ||= new Set();
+    if (el.open) state.open.add(el.dataset.id); else state.open.delete(el.dataset.id);
+  }));
+}
+
+/** 전 버전의 이름(옛 이름 포함)에서 찾는다. */
+function renderSearch(q) {
+  const hits = Object.values(LIN).filter(e => e.names.some(n => n.name.toLowerCase().includes(q)))
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'table' ? -1 : 1) || lastName(a).localeCompare(lastName(b))).slice(0, 200);
+  const box = document.getElementById('tables');
+  box.innerHTML = hits.length ? hits.map(e => {
+    const old = e.names.slice(0, -1).map(n => n.name);
+    const where = e.kind === 'column' ? `${lastName(LIN[e.table])}.` : '';
+    const span = lifeSpan(e);
+    return `<button class="hit" data-lin="${esc(e.id)}"><span class="hn">${esc(where)}${esc(lastName(e))}</span>
+      <span class="hm">${e.kind === 'table' ? L('테이블', 'Table') : L('컬럼', 'Column')} · ${esc(span)}${old.length ? ` · ${L('옛 이름', 'Formerly')} ${esc(old.join(', '))}` : ''}</span></button>`;
+  }).join('') : `<p class="empty">${L('일치하는 이름이 없습니다.', 'No matching names.')}</p>`;
+  wireLineageButtons(box);
+}
+
+const lastName = e => e ? e.names[e.names.length - 1].name : '';
+
+function wireLineageButtons(box) {
+  box.querySelectorAll('[data-lin]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); openLineage(b.dataset.lin); }));
+}
+
+/* ---------- 계보 ---------- */
+
+const EVENT_TEXT = {
+  table_added: () => L('테이블 생성', 'Table created'),
+  table_dropped: () => L('테이블 삭제', 'Table dropped'),
+  table_renamed: e => L(`이름 변경 ${e.before} → ${e.after}`, `Renamed ${e.before} → ${e.after}`),
+  table_recreated: () => L('같은 이름으로 지웠다가 다시 만듦', 'Dropped and recreated under the same name'),
+  table_comment: e => L(`코멘트 “${e.before ?? '없음'}” → “${e.after ?? '없음'}”`, `Comment “${e.before ?? 'none'}” → “${e.after ?? 'none'}”`),
+  column_added: e => L(`컬럼 추가 · ${shortType(e.after)}`, `Column added · ${shortType(e.after)}`),
+  column_dropped: () => L('컬럼 삭제', 'Column dropped'),
+  column_renamed: e => L(`이름 변경 ${e.before} → ${e.after}`, `Renamed ${e.before} → ${e.after}`),
+  column_recreated: () => L('같은 이름으로 지웠다가 다시 만듦', 'Dropped and recreated under the same name'),
+  column_type: e => L(`타입 ${shortType(e.before)} → ${shortType(e.after)}`, `Type ${shortType(e.before)} → ${shortType(e.after)}`),
+  column_nullable: e => e.after ? L('NULL 허용으로 변경', 'Changed to allow NULL') : L('NOT NULL 로 변경', 'Changed to NOT NULL'),
+  column_default: e => L(`기본값 ${e.before ?? '없음'} → ${e.after ?? '없음'}`, `Default ${e.before ?? 'none'} → ${e.after ?? 'none'}`),
+  column_comment: e => L(`코멘트 “${e.before ?? '없음'}” → “${e.after ?? '없음'}”`, `Comment “${e.before ?? 'none'}” → “${e.after ?? 'none'}”`),
+  column_identity: e => `identity ${e.before ?? L('없음', 'none')} → ${e.after ?? L('없음', 'none')}`,
+  column_generated: e => e.after ? L('생성 컬럼으로 바뀜', 'Became a generated column') : L('생성 컬럼이 아니게 됨', 'No longer a generated column'),
+  column_collation: e => `COLLATE ${e.before ?? L('기본', 'default')} → ${e.after ?? L('기본', 'default')}`,
+  constraint_added: e => L(`제약 추가 ${e.after}`, `Constraint added ${e.after}`),
+  constraint_dropped: e => L(`제약 삭제 ${e.before}`, `Constraint dropped ${e.before}`),
+  index_added: e => `${L('인덱스 추가', 'Index added')} ${String(e.after).replace(/^CREATE (UNIQUE )?INDEX (\S+) ON \S+ /, '$2 ')}`,
+  index_dropped: e => `${L('인덱스 삭제', 'Index dropped')} ${String(e.before).replace(/^CREATE (UNIQUE )?INDEX (\S+) ON \S+ /, '$2 ')}`,
+};
+const kindClass = k => /_added$/.test(k) ? 'k-add' : /_(dropped|recreated)$/.test(k) ? 'k-drop' : /_renamed$/.test(k) ? 'k-ren' : '';
+
+/** 좁은 화면에서 접어 두는 테이블·계보 영역의 버튼 글자. */
+function syncAsideToggle(n) {
+  const btn = document.getElementById('aside-toggle');
+  if (n != null) btn.dataset.n = n;
+  btn.innerHTML = `${CHEV}<span>${esc(L(`테이블 ${btn.dataset.n ?? ''}개 · 계보`, `Tables (${btn.dataset.n ?? ''}) · Lineage`))}</span>`;
+}
+
+/** 테이블·계보 영역을 펼치거나 접는다. 넓은 화면에서는 늘 보인다. */
+function setAside(open) {
+  document.getElementById('aside').classList.toggle('open', open);
+  document.getElementById('aside-toggle').setAttribute('aria-expanded', String(open));
+}
+
+function openLineage(id) {
+  state.lin = id;
+  setAside(true);
+  setTab('lin');
+  renderLineage(id, true);
+  writeHash();
+}
+
+function renderLineage(id, focus) {
+  const e = LIN[id], box = document.getElementById('lin');
+  if (!e) { box.innerHTML = `<p class="empty">${L('계보를 찾지 못했습니다.', 'Lineage not found.')}</p>`; return; }
+  const items = [];
+  if (!e.events.some(x => x.step === e.created && /_(added|recreated)$/.test(x.kind))) {
+    items.push({ step: e.created, kind: `${e.kind}_added`, text: e.kind === 'column' ? L(`테이블과 함께 생성 · ${shortType(firstType(e))}`, `Created with the table · ${shortType(firstType(e))}`) : L('테이블 생성', 'Table created') });
+  }
+  e.events.forEach(x => items.push({ ...x, text: (EVENT_TEXT[x.kind] || (() => x.kind))(x) }));
+  if (e.kind === 'table') {
+    for (const c of Object.values(LIN)) {
+      if (c.table !== id) continue;
+      c.events.filter(x => /^column_(added|dropped|renamed|recreated)$/.test(x.kind) && !x.implied)
+        .forEach(x => items.push({ ...x, col: lastName(c), text: EVENT_TEXT[x.kind](x) }));
+    }
+  }
+  items.sort((a, b) => a.step - b.step);
+  const old = e.names.slice(0, -1).map(n => `${n.name} (${vlabel(n.step)}~)`);
+  const where = e.kind === 'column' ? L(`${lastName(LIN[e.table])} 테이블의 컬럼`, `Column of table ${lastName(LIN[e.table])}`) : L('테이블', 'Table');
+  const life = L(`${vlabel(e.created)}에 생성${e.dropped != null ? ` · ${vlabel(e.dropped)}에 삭제` : ' · 지금도 있음'}`,
+    `Created at ${vlabel(e.created)}${e.dropped != null ? ` · Dropped at ${vlabel(e.dropped)}` : ' · still present'}`);
+  box.innerHTML = `<h3 tabindex="-1">${esc(lastName(e))}</h3><p class="lk">${esc(where)} · ${esc(life)}</p>
+    ${old.length ? `<p class="aka">${L('옛 이름', 'Formerly')}: ${esc(old.join(', '))}</p>` : ''}
+    <ol>${items.map(x => `<li class="${kindClass(x.kind)}"><button class="ev-step" data-step="${x.step}" aria-label="${esc(L(`${vlabel(x.step)} 로 이동`, `Go to ${vlabel(x.step)}`))}"${x.step === state.step ? ' aria-current="step"' : ''}>${esc(vlabel(x.step))}</button>
+      <span class="ev-txt">${x.col ? `<span class="ev-col">${esc(x.col)}</span> ` : ''}${esc(x.text)}${x.confidence === 'confirmed' ? `<span class="badge b-ok" title="${L('같은 객체(oid·attnum)의 이름이 바뀐 것을 확인했습니다', 'Confirmed that the same object (oid, attnum) was renamed')}">${L('확정', 'Confirmed')}</span>` : x.confidence === 'suspected' ? `<span class="badge b-sus">${L('의심', 'Suspected')}</span>` : ''}</span></li>`).join('')}</ol>`;
+  box.querySelectorAll('.ev-step').forEach(b => b.addEventListener('click', () => select(+b.dataset.step)));
+  if (focus) box.querySelector('h3').focus();
+}
+
+/** 컬럼의 처음 타입. 생성 단계 diff 에서 찾는다. */
+function firstType(e) {
+  const d = diffOf(e.created);
+  for (const t of d?.tables || []) for (const c of t.columns) if (c.id === e.id) return (c.after || c.before).type;
+  return e.type;
+}
+
+function setTab(name) {
+  for (const [tab, pane] of [['tab-tables', 'pane-tables'], ['tab-lin', 'pane-lin']]) {
+    const on = tab === `tab-${name}`;
+    document.getElementById(tab).setAttribute('aria-selected', String(on));
+    document.getElementById(tab).tabIndex = on ? 0 : -1;
+    document.getElementById(pane).hidden = !on;
+  }
+}
+
+/* ---------- 전체 검색 (⌘K / Ctrl+K) ---------- */
+
+const PAL_LIMIT = { cmd: 6, table: 8, column: 12, step: 8, sql: 10 };
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+let palIndex = null;
+/** items: 지금 목록의 항목, active: 선택 위치, more: "더 보기"로 펼친 그룹, back: 팔레트를 열기 전 포커스. */
+const pal = { items: [], active: 0, more: new Set(), back: null };
+
+/** 검색 대상을 한 번만 만든다. 이름은 소문자, SQL 은 줄 단위 소문자로 둔다. */
+function buildPalIndex() {
+  const names = Object.values(LIN || {}).map(e => {
+    const cands = e.names.map((n, k) => ({ name: n.name, lower: n.name.toLowerCase(), cur: k === e.names.length - 1 }));
+    if (e.kind === 'column') {
+      const q = `${lastName(LIN[e.table])}.${lastName(e)}`;
+      cands.push({ name: q, lower: q.toLowerCase(), cur: true, qualified: true });
+    }
+    return { e, cands };
+  });
+  const steps = D.steps.map((s, k) => {
+    const label = vlabel(k + 1);
+    return { i: k + 1, s, label: label.toLowerCase(), hay: [label, s.description, s.file, D.summary?.[s.file] || ''].join('\n').toLowerCase(),
+      lines: String(s.sql || '').split('\n'), lower: String(s.sql || '').toLowerCase().split('\n') };
+  });
+  return { names, steps };
+}
+
+/** 이름 후보 중 가장 높은 점수. 지금 이름이 옛 이름보다 앞선다. */
+function nameScore(cands, q, toks) {
+  let best = 0;
+  for (const c of cands) {
+    const l = c.lower;
+    let s = l === q ? 100 : l.startsWith(q) ? 80 : l.includes(q) ? 60 : toks.every(t => l.includes(t)) ? 40 : 0;
+    if (s && c.qualified && s < 100) s -= 5;
+    if (s && !c.cur) s -= 15;
+    if (s > best) best = s;
+  }
+  return best;
+}
+
+/** text 안에서 toks 가 나오는 곳을 <mark> 로 감싼 HTML. 원문에서 대소문자 무시 정규식으로 찾는다. */
+function markHtml(text, toks) {
+  const parts = [...new Set(toks.filter(Boolean))].sort((a, b) => b.length - a.length).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!parts.length) return esc(text);
+  const re = new RegExp(parts.join('|'), 'giu');
+  let out = '', at = 0;
+  for (const m of text.matchAll(re)) {
+    if (!m[0]) continue;
+    out += esc(text.slice(at, m.index)) + `<mark>${esc(m[0])}</mark>`;
+    at = m.index + m[0].length;
+  }
+  return out + esc(text.slice(at));
+}
+
+/** 긴 줄에서 q 가 나오는 곳 앞뒤만 남긴다. */
+function snippet(line, q, width = 90) {
+  const t = line.replace(/\t/g, '  ');
+  if (t.length <= width) return t.trim();
+  const pos = Math.max(0, t.toLowerCase().indexOf(q));
+  const from = Math.max(0, Math.min(pos - 30, t.length - width));
+  const end = Math.max(from + width, Math.min(t.length, pos + q.length));
+  return (from > 0 ? '…' : '') + t.slice(from, end).trim() + (end < t.length ? '…' : '');
+}
+
+function palCommands() {
+  const theme = document.documentElement.getAttribute('data-theme') || 'auto', size = currentSize() || 'm';
+  const multi = D.kind !== 'compare' && N > 1;
+  return [
+    { t: L('변경 내용 보기', 'Show changes'), k: '변경 changes diff 리뷰 review view', when: state.view !== 'diff', run: () => setView('diff') },
+    { t: L(`${vlabel(state.step)} 시점 전체 DDL 보기`, `Show full DDL at ${vlabel(state.step)}`), k: '전체 full ddl schema sql 스키마', when: state.view !== 'ddl', run: () => setView('ddl') },
+    { t: L('처음부터 끝까지 합친 변경 보기', 'Show all changes combined'), k: '구간 비교 compare range 전체 all', when: multi && canRange() && !(state.range?.a === 1 && state.range?.b === APPLIED), run: () => selectRange(1, APPLIED, 1) },
+    { t: L('첫 버전으로', 'Go to first version'), k: '처음 first', when: multi && state.step !== 1, run: () => select(1, true) },
+    { t: L('마지막 버전으로', 'Go to last version'), k: '끝 last latest', when: multi && state.step !== N, run: () => select(N, true) },
+    ...[['auto', L('자동', 'Auto')], ['light', L('라이트', 'Light')], ['dark', L('다크', 'Dark')]].map(([v, n]) =>
+      ({ t: L(`테마: ${n}`, `Theme: ${n}`), k: 'theme 테마 색', when: theme !== v, run: () => document.querySelector(`.theme [data-theme="${v}"]`).click() })),
+    ...[['s', L('작게', 'Small')], ['m', L('보통', 'Medium')], ['l', L('크게', 'Large')]].map(([v, n]) =>
+      ({ t: L(`글자 크기: ${n}`, `Text size: ${n}`), k: 'font size 글자 크기', when: size !== v, run: () => setSize(v) })),
+  ].filter(c => c.when);
+}
+
+const stepMeta = s => s.status !== 'applied' ? (STEP_STATE[s.status] || '') : `${chg(s.event_count || 0)}${s.data_loss ? ` · ${L('데이터 유실 가능', 'May lose data')}` : ''}${s.dml ? ` · ${L('DML 포함', 'Contains DML')}` : ''}`;
+const stepItem = (x, toks) => ({
+  title: markHtml(D.summary?.[x.s.file] || x.s.description || x.s.file, toks), right: esc(vlabel(x.i)), loss: x.s.data_loss,
+  meta: `${markHtml(x.s.file, toks)} · ${esc(stepMeta(x.s))}`, run: () => select(x.i, true),
+});
+
+/** 검색어로 그룹별 결과를 만든다. 빈 검색어면 명령과 데이터 유실 가능 버전을 보여 준다. */
+function palSearch(raw) {
+  palIndex ||= buildPalIndex();
+  const q = raw.trim().toLowerCase(), toks = q.split(/\s+/).filter(Boolean);
+  const groups = [];
+  const add = (key, label, list) => {
+    if (!list.length) return;
+    const cut = pal.more.has(key) ? list.length : PAL_LIMIT[key], items = list.slice(0, cut);
+    if (list.length > cut) items.push({ title: L(`나머지 ${list.length - cut}개 더 보기`, `Show ${list.length - cut} more`), more: true, keep: true, run: () => { pal.more.add(key); renderPal(key); } });
+    groups.push({ key, label, total: list.length, shown: Math.min(cut, list.length), items });
+  };
+  const cmds = palCommands();
+  if (!q) {
+    add('cmd', L('명령', 'Commands'), cmds.map(c => ({ title: esc(c.t), run: c.run })));
+    if (D.kind !== 'compare') add('step', L('데이터 유실 가능 버전', 'Versions that may lose data'), palIndex.steps.filter(x => x.s.data_loss).map(x => stepItem(x, [])));
+    return groups;
+  }
+  const scored = palIndex.names.map(n => ({ ...n, score: nameScore(n.cands, q, toks) })).filter(n => n.score)
+    .sort((a, b) => b.score - a.score || lastName(a.e).length - lastName(b.e).length || lastName(a.e).localeCompare(lastName(b.e)));
+  const nameItem = ({ e }) => {
+    const old = e.names.slice(0, -1).map(n => n.name), tbl = e.kind === 'column' ? lastName(LIN[e.table]) : '';
+    const life = lifeSpan(e);
+    return {
+      title: (tbl ? `<span class="tbl">${markHtml(tbl, toks)}.</span>` : '') + markHtml(lastName(e), toks), code: true,
+      right: e.dropped != null ? L('삭제됨', 'dropped') : '', meta: `${esc(life)}${old.length ? ` · ${L('옛 이름', 'Formerly')} ${markHtml(old.join(', '), toks)}` : ''}${e.kind === 'column' && e.type ? ` · ${esc(shortType(e.type))}` : ''}`,
+      run: () => openLineage(e.id),
+    };
+  };
+  const stepHits = palIndex.steps.map(x => ({ x, score: x.label === q || x.label === `v${q}` ? 100 : x.label.startsWith(q) ? 70 : x.hay.includes(q) ? 50 : toks.every(t => x.hay.includes(t)) ? 30 : 0 }))
+    .filter(h => h.score).sort((a, b) => b.score - a.score || a.x.i - b.x.i);
+  const sqlHits = [];
+  if (q.length >= 2) for (const x of palIndex.steps) {
+    const at = [];
+    x.lower.forEach((l, k) => { if (l.includes(q)) at.push(k + 1); });
+    if (at.length) sqlHits.push({ x, at });
+  }
+  const steps = () => add('step', L('버전', 'Versions'), stepHits.map(h => stepItem(h.x, toks)));
+  if (/^v?\d+(\.\d+)*$/.test(q)) steps();
+  add('table', L('테이블', 'Tables'), scored.filter(n => n.e.kind === 'table').map(nameItem));
+  add('column', L('컬럼', 'Columns'), scored.filter(n => n.e.kind === 'column').map(nameItem));
+  if (!/^v?\d+(\.\d+)*$/.test(q)) steps();
+  add('sql', L('SQL 원문', 'SQL source'), sqlHits.map(({ x, at }) => ({
+    title: markHtml(snippet(x.lines[at[0] - 1], q), [q]), code: true, right: esc(vlabel(x.i)),
+    meta: `${esc(x.s.file)} · ${L(`${at[0]}번째 줄${at.length > 1 ? ` 외 ${at.length - 1}곳 (모두 표시)` : ''}`, `line ${at[0]}${at.length > 1 ? ` and ${at.length - 1} more (all highlighted)` : ''}`)}`, run: () => openSqlLine(x.i, at),
+  })));
+  add('cmd', L('명령', 'Commands'), cmds.filter(c => toks.every(t => `${c.t} ${c.k}`.toLowerCase().includes(t))).map(c => ({ title: markHtml(c.t, toks), run: c.run })));
+  return groups;
+}
+
+/** 결과 목록을 다시 그린다. expanded 를 주면 그 그룹에서 새로 펼친 첫 항목을 고른다. */
+function renderPal(expanded) {
+  const input = document.getElementById('pal-q');
+  const groups = palSearch(input.value);
+  const box = document.getElementById('pal-list');
+  pal.items = groups.flatMap(g => g.items);
+  let k = 0, focusAt = 0;
+  box.innerHTML = groups.length ? groups.map(g => {
+    if (g.key === expanded) focusAt = k + PAL_LIMIT[g.key];
+    return `<div role="group" aria-labelledby="pal-g-${g.key}"><div class="pal-group" id="pal-g-${g.key}">${esc(g.label)}${g.total > g.shown ? `<span class="more">${L(`${g.total}개 중 ${g.shown}개`, `${g.shown} of ${g.total}`)}</span>` : ''}</div>
+    ${g.items.map(it => `<div class="po${it.more ? ' more' : ''}" role="option" id="pal-o-${k}" data-k="${k++}" aria-selected="false"><span class="pt${it.code ? ' ptc' : ''}">${it.title}</span><span class="pr${it.loss ? ' loss' : ''}">${it.right || ''}</span>${it.meta ? `<span class="pm">${it.meta}</span>` : ''}</div>`).join('')}</div>`;
+  }).join('') : `<p class="pal-empty">${L('일치하는 결과가 없습니다.', 'No matching results.')}</p>`;
+  input.setAttribute('aria-expanded', String(pal.items.length > 0));
+  const total = groups.reduce((n, g) => n + g.total, 0);
+  document.getElementById('pal-count').textContent = input.value.trim() ? L(`결과 ${total}개`, plural(total, 'result', 'results')) : '';
+  palActivate(focusAt);
+}
+
+function palActivate(k) {
+  const opts = document.querySelectorAll('#pal-list .po'), input = document.getElementById('pal-q');
+  if (!opts.length) { input.removeAttribute('aria-activedescendant'); return; }
+  pal.active = (k + opts.length) % opts.length;
+  opts.forEach((o, j) => o.setAttribute('aria-selected', String(j === pal.active)));
+  input.setAttribute('aria-activedescendant', opts[pal.active].id);
+  opts[pal.active].scrollIntoView({ block: 'nearest' });
+}
+
+/** k 번째 항목을 실행한다. keep 항목("더 보기")은 팔레트를 닫지 않는다. */
+function palRun(k) {
+  const it = pal.items[k];
+  if (!it) return;
+  if (it.keep) { it.run(); return; }
+  const back = pal.back;
+  pal.back = null;
+  document.getElementById('pal').close();
+  it.run();
+  const now = document.activeElement;
+  if ((!now || now === document.body || now === document.getElementById('pal')) && back?.isConnected) back.focus({ preventScroll: true });
+}
+
+/** 팔레트를 연다. 열려 있으면 닫는다. from 은 iframe 에서 연 경우 그 iframe 이다. */
+function openPal(from) {
+  const dlg = document.getElementById('pal'), input = document.getElementById('pal-q');
+  if (dlg.open) { dlg.close(); return; }
+  pal.back = from instanceof Element ? from : document.activeElement;
+  pal.more.clear();
+  dlg.showModal();
+  renderPal();
+  input.focus();
+  input.select();
+}
+
+/** 단계 i 의 SQL 원문을 펼치고 lines(1부터 센 줄 번호들)를 표시한 뒤 첫 줄로 스크롤한다. */
+function openSqlLine(i, lines) {
+  select(i);
+  const src = document.querySelector('#detail .sql-src');
+  if (!src) return;
+  src.closest('details').open = true;
+  const rows = src.querySelectorAll('.cl'), hit = lines.map(n => rows[n - 1]).filter(Boolean);
+  if (!hit.length) return;
+  hit.forEach(r => r.classList.add('found'));
+  src.scrollTop = hit[0].offsetTop - src.clientHeight / 3;
+  hit[0].scrollIntoView({ block: 'nearest' });
+  src.tabIndex = -1;
+  src.focus({ preventScroll: true });
+  document.getElementById('announce').textContent = L(`${vlabel(i)} SQL 원문 ${lines[0]}번째 줄${lines.length > 1 ? ` 외 ${lines.length - 1}곳` : ''}`, `${vlabel(i)} SQL source, line ${lines[0]}${lines.length > 1 ? ` and ${lines.length - 1} more` : ''}`);
+}
+
+/** Mac 은 ⌘K, 그 밖은 Ctrl+K. 자판 배열과 무관하게 K 자리 키도 받는다. */
+const isPalKey = e => (IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey
+  && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK');
+document.addEventListener('keydown', e => { if (isPalKey(e)) { e.preventDefault(); openPal(); } });
+window.addEventListener('message', e => {
+  const frame = document.getElementById('frame');
+  if (e.source !== frame.contentWindow) return;
+  if (e.data?.type === 'schema-timeline:palette') openPal(frame);
+  else if (e.data?.type === 'schema-timeline:select' && Number.isInteger(e.data.step) && e.data.step >= 1 && e.data.step <= D.steps.length) select(e.data.step);
+});
+document.getElementById('pal-open').addEventListener('click', () => openPal());
+document.getElementById('pal').addEventListener('close', () => {
+  const back = pal.back;
+  pal.back = null;
+  if (back?.isConnected) back.focus({ preventScroll: true });
+});
+document.querySelector('.pal-key').textContent = IS_MAC ? '⌘K' : 'Ctrl K';
+document.getElementById('pal-q').addEventListener('input', renderPal);
+document.getElementById('pal-q').addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+  if (move) { e.preventDefault(); palActivate(pal.active + move); }
+  else if (e.key === 'Enter') { e.preventDefault(); palRun(pal.active); }
+});
+document.getElementById('pal-list').addEventListener('click', e => { const o = e.target.closest('.po'); if (o) palRun(+o.dataset.k); });
+document.getElementById('pal-list').addEventListener('mousemove', e => { const o = e.target.closest('.po'); if (o && +o.dataset.k !== pal.active) palActivate(+o.dataset.k); });
+document.getElementById('pal-list').addEventListener('mousedown', e => e.preventDefault());
+let palDownOutside = false;
+/** 대화상자 바깥(배경)에서 눌렀다가 바깥에서 놓았을 때만 닫는다. */
+const outsidePal = e => { const r = e.currentTarget.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+document.getElementById('pal').addEventListener('mousedown', e => { palDownOutside = e.target === e.currentTarget && outsidePal(e); });
+document.getElementById('pal').addEventListener('click', e => {
+  if (palDownOutside && e.target === e.currentTarget && outsidePal(e)) e.currentTarget.close();
+  palDownOutside = false;
+});
+
+/* ---------- 테마 ---------- */
+
+function currentTheme() {
+  const v = document.documentElement.getAttribute('data-theme');
+  if (v) return v;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+const currentSize = () => document.documentElement.getAttribute('data-size');
+function syncFrameTheme() {
+  const doc = document.getElementById('frame').contentDocument;
+  if (doc?.documentElement) doc.documentElement.dataset.theme = currentTheme();
+  if (doc?.documentElement) {
+    if (currentSize()) doc.documentElement.dataset.size = currentSize(); else doc.documentElement.removeAttribute('data-size');
+  }
+}
+document.querySelectorAll('.theme button').forEach(b => b.addEventListener('click', () => {
+  const v = b.dataset.theme;
+  if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = v;
+  b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  try { localStorage.setItem('schema-history-theme', v); } catch (e) {}
+  syncFrameTheme();
+}));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncFrameTheme);
+/** 글자 크기(s·m·l)를 바꾼다. m 이 기본이다. */
+function setSize(v, remember = true) {
+  if (v === 'm') document.documentElement.removeAttribute('data-size'); else document.documentElement.dataset.size = v;
+  document.querySelectorAll('.seg.size button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.size === v)));
+  if (remember) try { localStorage.setItem('schema-ui-size', v); } catch (e) {}
+  if (typeof syncFrameTheme === 'function') syncFrameTheme();
+}
+document.querySelectorAll('.seg.size button').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)));
+try {
+  const size = localStorage.getItem('schema-ui-size');
+  if (size) setSize(size, false);
+} catch (e) {}
+try {
+  const saved = localStorage.getItem('schema-history-theme');
+  if (saved) document.querySelector(`.theme [data-theme="${saved}"]`)?.click();
+} catch (e) {}
+
+/* ---------- 시작 ---------- */
+
+applyLang();
+document.title = L('스키마 이력', 'Schema history');
+document.getElementById('tab-tables').addEventListener('click', () => setTab('tables'));
+document.getElementById('tab-lin').addEventListener('click', () => setTab('lin'));
+document.querySelector('.tabs').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const next = document.getElementById('tab-tables').getAttribute('aria-selected') === 'true' ? 'lin' : 'tables';
+  setTab(next);
+  document.getElementById(`tab-${next}`).focus();
+});
+document.getElementById('q').addEventListener('input', renderTables);
+document.getElementById('aside-toggle').addEventListener('click', () => setAside(!document.getElementById('aside').classList.contains('open')));
+const applied = D.steps.filter(s => s.status === 'applied').length;
+if (D.kind === 'compare') {
+  document.body.classList.add('compare');
+  document.title = document.querySelector('.topbar h1').textContent = L('스키마 비교', 'Schema compare');
+}
+document.getElementById('meta').textContent = `${D.source}${D.schema && D.schema !== 'public' ? L(` (스키마 ${D.schema})`, ` (schema ${D.schema})`) : ''} · ${D.kind === 'compare' ? L('DDL 두 개 비교', 'Two DDL files compared') : L(`${applied}/${N}단계 재생`, `${applied}/${N} ${N === 1 ? 'step' : 'steps'} replayed`)}`
+  + (D.warnings?.length ? L(` · 경고 ${D.warnings.length}건`, ` · ${plural(D.warnings.length, 'warning', 'warnings')}`) : '')
+  + (D.notes?.length ? L(` · 안내 ${D.notes.length}건`, ` · ${plural(D.notes.length, 'note', 'notes')}`) : '');
+document.getElementById('meta').title = [D.image ? L(`재생 이미지 ${D.image}`, `Replay image ${D.image}`) : '', D.generated_at ? L(`${D.generated_at} 생성`, `Generated ${D.generated_at}`) : '', ...(D.warnings || []), ...(D.notes || [])].filter(Boolean).join('\n');
+renderSteps();
+const h = new URLSearchParams(location.hash.slice(1));
+const want = +h.get('step');
+const rf = +h.get('from'), rt = +h.get('to');
+if (h.get('id') && LIN[h.get('id')]) state.lin = h.get('id');
+if (h.get('view') === 'ddl') state.view = 'ddl';
+const failedAt = D.steps.findIndex(s => s.status === 'failed') + 1;
+if (canRange() && rf >= 1 && rt > rf && rt <= APPLIED) selectRange(rf, rt, rf);
+else if (rf >= 1 && rf === rt && rf <= N) select(rf);
+else select(want >= 1 && want <= N ? want : failedAt || N);
+if (state.lin) openLineage(state.lin);
+</script>
+</body>
+</html>

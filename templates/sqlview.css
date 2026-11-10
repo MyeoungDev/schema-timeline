@@ -1,0 +1,32 @@
+/* SQL 코드 보기(sqlview.js). 색은 tokens.css 의 --syn-* 와 diff 토큰을 쓴다. */
+.code { font: 0.875rem/1.6 var(--mono); background: var(--bg); overflow-x: auto; }
+.code .cl { display: grid; grid-template-columns: 3rem 3rem 1.375rem minmax(0, 1fr); min-width: max-content; }
+.code.single .cl, .code-plain .cl { grid-template-columns: 3.5rem 1.375rem minmax(0, 1fr); }
+.code-plain .cl { grid-template-columns: 3.5rem minmax(0, 1fr); }
+.code .cn, .code-plain .cn { color: var(--fg-muted); text-align: right; padding-right: 10px; user-select: none; background: var(--bg-muted); }
+.code .cs { text-align: center; user-select: none; color: var(--fg-muted); }
+.code code, .code-plain code { font: inherit; white-space: pre; padding-right: 16px; }
+.code-plain code { padding-left: 12px; }
+.code .cl-added { background: var(--success-muted); } .code .cl-added .cn { background: var(--success-emph); color: var(--fg); }
+.code .cl-dropped { background: var(--danger-muted); } .code .cl-dropped .cn { background: var(--danger-emph); color: var(--fg); }
+.code .cl-added .cs, .code .cl-dropped .cs { color: var(--fg); font-weight: 600; }
+.code del.w, .code ins.w { color: inherit; text-decoration: none; border-radius: 2px; padding: 0; }
+.code del.w { background: var(--danger-emph); } .code ins.w { background: var(--success-emph); }
+.code del.w [class^="sx-"], .code ins.w [class^="sx-"] { color: var(--fg); }
+.code .cfold-btn { display: block; width: 100%; text-align: left; border: 0; cursor: pointer; padding: 1px 0 1px 7.375rem;
+  background: var(--accent-muted); color: var(--accent); font: 0.8125rem/1.67 var(--font); }
+.code.single .cfold-btn { padding-left: 4.875rem; }
+.code .cfold-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.code .cl:focus { outline: none; box-shadow: inset 2px 0 var(--accent); }
+@media print {
+  .code, .code-plain { overflow: visible; }
+  .code code, .code-plain code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .code .cl, .code-plain .cl { min-width: 0; }
+}
+.sx-k { color: var(--syn-keyword); } .sx-y { color: var(--syn-type); } .sx-s { color: var(--syn-string); }
+.sx-c { color: var(--syn-comment); font-style: italic; } .sx-n { color: var(--syn-type); } .sx-f { color: var(--syn-func); }
+.editor { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+.editor-bar { display: flex; align-items: center; gap: 10px; padding: 0 8px 0 0; background: var(--bg-muted); border-bottom: 1px solid var(--border); min-height: 34px; flex-wrap: wrap; }
+.editor-tab { font: 0.875rem var(--mono); padding: 7px 12px; background: var(--bg); border-right: 1px solid var(--border); border-top: 2px solid var(--accent); margin-bottom: -1px; }
+.editor-bar .meta { color: var(--fg-muted); font-size: 0.8125rem; }
+.editor-bar .acts { margin-left: auto; display: flex; gap: 6px; }

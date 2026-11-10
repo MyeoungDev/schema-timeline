@@ -1,0 +1,10 @@
+{
+  "V1__init.sql": "고객·상품·주문·주문 항목 테이블과 구 쿠폰·태그 테이블을 만듭니다.",
+  "V2__customer_phone.sql": "고객에 연락처 phone 컬럼과 그 인덱스를 추가합니다.",
+  "V3__rename_order_status.sql": "주문의 status 를 state 로 이름을 바꾸고(확정) 길이를 30자로 늘립니다.",
+  "V4__product_sku.sql": "상품에 NOT NULL·UNIQUE 인 sku 를 추가하고 가격 정밀도를 늘립니다. 기존 행이 있으면 sku 추가가 실패합니다.",
+  "V5__shipments.sql": "배송 상태 enum 과 주문을 참조하는 배송 테이블을 추가합니다.",
+  "V6__order_summary_view.sql": "고객별 주문 건수·금액 뷰를 추가합니다.",
+  "V7__drop_legacy.sql": "구 쿠폰 테이블을 통째로 지우고 고객 fax, 주문 memo 컬럼을 지웁니다. 지운 테이블·컬럼의 값은 사라집니다.",
+  "V8__recreate_tags.sql": "태그 테이블을 지우고 라벨 길이·색상을 바꿔 다시 만듭니다. 기존 태그 행은 모두 사라집니다."
+}

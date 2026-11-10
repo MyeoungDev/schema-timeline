@@ -1,0 +1,261 @@
+{
+  "tables": [
+    {
+      "name": "legacy_coupons",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('legacy_coupons_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "code",
+          "ordinal": 2,
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "legacy_coupons_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "order_items",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('order_items_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "order_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "product_name",
+          "ordinal": 3,
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "qty",
+          "ordinal": 4,
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "price",
+          "ordinal": 5,
+          "type": "numeric(10,2)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "order_items_order_id_fkey",
+          "kind": "f",
+          "columns": [
+            "order_id"
+          ],
+          "ref_table": "orders",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (order_id) REFERENCES orders(id)"
+        },
+        {
+          "name": "order_items_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "orders",
+      "comment": "주문",
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('orders_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "user_id",
+          "ordinal": 2,
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "state",
+          "ordinal": 3,
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'NEW'::character varying",
+          "comment": null
+        },
+        {
+          "name": "total",
+          "ordinal": 4,
+          "type": "numeric(10,2)",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "memo",
+          "ordinal": 5,
+          "type": "text",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 6,
+          "type": "timestamp without time zone",
+          "nullable": true,
+          "default": "now()",
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "orders_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "orders_user_id_fkey",
+          "kind": "f",
+          "columns": [
+            "user_id"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_orders_user",
+          "unique": false,
+          "columns": [
+            "user_id"
+          ],
+          "definition": "CREATE INDEX idx_orders_user ON public.orders USING btree (user_id)"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "comment": null,
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 1,
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('users_id_seq'::regclass)",
+          "comment": null
+        },
+        {
+          "name": "email",
+          "ordinal": 2,
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "name",
+          "ordinal": 3,
+          "type": "character varying(50)",
+          "nullable": true,
+          "default": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "ordinal": 4,
+          "type": "timestamp without time zone",
+          "nullable": true,
+          "default": "now()",
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "users_email_key",
+          "kind": "u",
+          "columns": [
+            "email"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "UNIQUE (email)"
+        },
+        {
+          "name": "users_pkey",
+          "kind": "p",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": null,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "views": [],
+  "source": "v1.sql"
+}

@@ -1,0 +1,1765 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-en="Schema change review">스키마 변경 리뷰</title>
+<style>
+/*__TOKENS__*/
+/*__SQLVIEW_CSS__*/
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 48px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 0.9375rem/1.6 var(--font); word-break: keep-all; overflow-wrap: anywhere; }
+button { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-size: 0.875rem; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+
+/* 상단 막대 */
+.topbar { border-bottom: 1px solid var(--border); background: var(--bg-muted); }
+.topbar .wrap { display: flex; align-items: center; gap: 16px; min-height: 56px; flex-wrap: wrap; }
+.topbar h1 { font-size: 1.0625rem; font-weight: 600; margin: 0; }
+.topbar .src { color: var(--fg-muted); font-family: var(--mono); font-size: 0.875rem; }
+.topbar .src b { color: var(--fg); font-weight: 600; }
+#copy-md { margin-left: auto; }
+.embed .topbar .seg.theme, .embed .topbar .seg.size { display: none; }
+.seg.size { margin-left: 8px; }
+.export-menu { position: relative; }
+.export-menu > summary { list-style: none; display: inline-block; }
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-menu .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; width: 16rem; display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px #0003; padding: 4px; }
+.export-menu .menu button { text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
+.export-menu .menu button:hover, .export-menu .menu button:focus-visible { background: var(--bg-muted); }
+.export-menu .menu-note { margin: 4px 10px 6px; font-size: 0.75rem; color: var(--fg-muted); }
+.export-menu .menu-status { margin: 0 10px 6px; font-size: 0.8125rem; color: var(--success); }
+.embed .summary { padding-top: 16px; }
+.embed .topbar h1 { display: none; }
+@media (max-width: 700px) {
+  .embed .topbar .wrap { min-height: 0; padding-top: 6px; padding-bottom: 6px; gap: 6px 12px; }
+  .embed .topbar .src { display: none; }
+  .embed .summary { padding-top: 12px; }
+}
+.md-out { flex-basis: 100%; height: 160px; margin-bottom: 10px; font: 0.8125rem/1.5 var(--mono); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.md-out[hidden] { display: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 세그먼트 버튼 */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); overflow: hidden; }
+.seg button { border: 0; background: none; padding: 3px 12px; font-size: 0.875rem; cursor: pointer; line-height: 20px; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--bg-muted); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+.seg button:focus-visible, .btn:focus-visible, .blk-head:focus-visible, .risk:focus-visible, .risk-more:focus-visible,
+.map-link:focus-visible, .ln.fold button:focus-visible, .toc a:focus-visible, .toc input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 요약 */
+.summary { padding: 28px 0 8px; }
+/* 요약 띠: 한 프레임 안을 가는 선으로 나눈 칸. 첫 칸은 주요 변경사항(유실·확인 필요), 나머지는 종류별 변경 건수와 구성 막대 */
+.kpis { display: grid; grid-template-columns: 1.35fr repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.kpi { background: var(--bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.kpis.n6 { grid-template-columns: 1.35fr repeat(5, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } .kpi.check { grid-column: 1 / -1; }
+  .kpis.n6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpis.n6 .kpi:last-child { grid-column: span 2; } }
+@media (max-width: 520px) { .kpis, .kpis.n6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi .lbl { font-size: 0.8125rem; color: var(--fg-muted); }
+.kpi .val { font-size: 1.875rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.kpi .val .unit { font-size: 0.875rem; font-weight: 500; color: var(--fg-muted); letter-spacing: 0; margin-left: 4px; }
+.kpi .val.zero { color: var(--fg-muted); }
+.kpi.check .val.bad { color: var(--danger); } .kpi.check .val.warn { color: var(--attention); } .kpi.check .val.ok { color: var(--success); }
+.kpi .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--border-muted); }
+.kpi .bar i { display: block; height: 100%; min-width: 4px; }
+.kpi-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 0.8125rem; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.kpi-legend b { font-weight: 600; color: var(--fg); }
+.kpi-legend span { white-space: nowrap; }
+.kpi-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--c); vertical-align: 0; }
+.c-add { --c: var(--success); } .c-del { --c: var(--danger); } .c-chg { --c: var(--attention); } .c-ren { --c: var(--accent); }
+.bar .c-add, .bar .c-del, .bar .c-chg, .bar .c-ren { background: var(--c); }
+.n-add { color: var(--success); } .n-del { color: var(--danger); } .n-chg { color: var(--attention); }
+.n-add.zero, .n-del.zero, .n-chg.zero { color: var(--fg-muted); font-weight: 400; }
+
+.risks { margin-top: 24px; }
+.risks[hidden] { display: none; }
+h2 { font-size: 1.0625rem; font-weight: 600; margin: 0; }
+.sec-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 12px; flex-wrap: wrap; }
+.sec-head .hint { color: var(--fg-muted); font-size: 0.875rem; }
+.risk-list { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.risk { display: grid; grid-template-columns: 1rem var(--what-w, 16ch) minmax(0, 1fr); gap: 4px 14px; align-items: start;
+  width: 100%; text-align: left; background: none; border: 0; padding: 8px 16px; cursor: pointer; }
+.risk[hidden] { display: none; }
+.risk + .risk { border-top: 1px solid var(--border-muted); }
+.risk:hover { background: var(--bg-muted); }
+.risk .what { font-family: var(--mono); font-size: 0.875rem; font-weight: 600; overflow-wrap: anywhere; }
+.risk .why { color: var(--fg-muted); font-size: 0.875rem; }
+.risk .lead { color: var(--fg); font-weight: 600; }
+.risk .lead.whole { color: var(--danger); }
+.lvl { display: inline-flex; align-items: center; height: 1.4em; }
+.lvl svg { flex: none; }
+.lvl-danger { color: var(--danger); } .lvl-attention { color: var(--attention); }
+.lvl-hint { color: var(--accent); }
+.checks-box summary { cursor: pointer; color: var(--accent); font-size: 0.875rem; }
+.checks { margin: 8px 0 0; max-height: 360px; overflow: auto; background: var(--bg-muted); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font: 0.8125rem/1.6 var(--mono); white-space: pre; }
+.risk-more { display: block; width: 100%; border: 0; border-top: 1px solid var(--border-muted); background: var(--bg-muted);
+  color: var(--accent); padding: 6px 16px; text-align: left; font-size: 0.875rem; cursor: pointer; }
+.obj { display: grid; grid-template-columns: 5.5rem 6.5rem minmax(0, 1fr) auto; gap: 4px 14px; align-items: baseline; padding: 8px 16px; font-size: 0.875rem; }
+.obj + .obj { border-top: 1px solid var(--border-muted); }
+.obj-kind { font-weight: 600; } .obj-type { color: var(--fg-muted); }
+.obj-name { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; } .obj-on { color: var(--fg-muted); font-weight: 400; }
+.obj-st { color: var(--fg-muted); font-size: 0.8125rem; } .obj-st.bad { color: var(--danger); font-weight: 600; }
+@media (max-width: 520px) { .obj { grid-template-columns: 4.5rem minmax(0, 1fr); } .obj-type { grid-column: 2; } .obj-name { grid-column: 1 / -1; } }
+.none { color: var(--fg-muted); font-size: 0.875rem; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; }
+
+section.sec { padding-top: 36px; }
+
+/* 관계도 */
+.map-frame { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-muted); overflow: hidden; }
+/* 보기 창: 높이를 정해 두고 안에서 스크롤·끌기·확대축소 한다 */
+.map-view { overflow: auto; max-height: min(72vh, 900px); cursor: grab; outline: none; scrollbar-gutter: stable; touch-action: pan-x pan-y; }
+.map-view:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.map-view.dragging { cursor: grabbing; user-select: none; }
+.map-view.dragging .node { pointer-events: none; }
+.zoom-val { min-width: 4.2em; font-variant-numeric: tabular-nums; }
+.map-tip { color: var(--fg-muted); font-size: 0.75rem; padding: 6px 12px 0; }
+.map-frame:fullscreen { display: flex; flex-direction: column; border-radius: 0; }
+.map-frame:fullscreen .map-view { max-height: none; flex: 1; }
+.map-frame:fullscreen .fs-bar { display: flex; }
+.fs-bar { display: none; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg); flex-wrap: wrap; }
+.fs-bar .hint { color: var(--fg-muted); font-size: 0.8125rem; margin-right: auto; }
+.map-scale { padding: 24px; box-sizing: content-box; }
+.map { position: relative; transform-origin: 0 0; }
+.map svg.edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.e { fill: none; stroke: var(--fg-muted); stroke-width: 1.25; opacity: .7; }
+.e.e-added { stroke: var(--success); opacity: 1; stroke-width: 1.5; }
+.e.e-dropped { stroke: var(--danger); stroke-dasharray: 4 3; opacity: 1; }
+.e.hot { stroke: var(--accent); opacity: 1; stroke-width: 2; }
+.e-dot { fill: var(--bg); stroke: var(--fg-muted); stroke-width: 1.25; }
+.e-dot.e-added { stroke: var(--success); } .e-dot.e-dropped { stroke: var(--danger); }
+.e-dot.hot { stroke: var(--accent); }
+.e-bk { fill: none; stroke: var(--fg-muted); stroke-width: 1.5; } .e-bk.e-added { stroke: var(--success); } .e-bk.e-dropped { stroke: var(--danger); } .e-bk.hot { stroke: var(--accent); }
+.e-end { fill: var(--fg-muted); } .e-end.e-added { fill: var(--success); } .e-end.e-dropped { fill: var(--danger); } .e-end.hot { fill: var(--accent); }
+.map svg.labels { z-index: 1; }
+.e-label { font: 10.5px var(--mono); fill: var(--fg-muted); paint-order: stroke; stroke: var(--bg-muted); stroke-width: 4px; }
+
+.node { position: absolute; width: 216px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: var(--shadow); cursor: pointer; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.node:hover, .node.hot { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.node.static { cursor: default; }
+.node.lonely { display: none; }
+.node.neighbor { border-style: dashed; border-color: color-mix(in srgb, var(--fg-muted) 55%, var(--border)); }
+.map-find { width: 9.5rem; font: 0.875rem var(--font); padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); line-height: 20px; }
+.map-find-n { font-size: 0.8125rem; color: var(--fg-muted); align-self: center; min-width: 2ch; }
+.map.finding .node:not(.found) { opacity: .28; }
+.map.finding .node.found { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.map.finding .edges [data-a]:not(.found), .map.hovering .edges [data-a]:not(.hot) { opacity: .12; }
+.node.neighbor .nh { background: var(--bg); }
+.node.neighbor .nh .tn { font-weight: 500; color: var(--fg-muted); }
+.node .nr.more .cn { font-family: var(--font); font-size: 11px; color: var(--fg-muted); }
+.seg[hidden] { display: none; }
+.node.s-dropped { border-style: dashed; border-color: var(--danger); }
+.node.s-added { border-color: var(--success); }
+.node .nh { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; height: 32px;
+  border-bottom: 1px solid var(--border); background: var(--bg-muted); }
+.node .nh .tn { font-family: var(--mono); font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .nh .tc { color: var(--fg-muted); font-size: 11px; padding-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
+.node .nr { display: grid; grid-template-columns: 20px 16px 1fr auto; align-items: center; height: 24px; font-size: 12px; }
+.node .nr + .nr { border-top: 1px solid var(--border-muted); }
+.node .nr .cn { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .nr .ct { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); padding: 0 8px 0 6px; white-space: nowrap; }
+.gut { text-align: center; font-family: var(--mono); font-size: 0.8125rem; font-weight: 600; align-self: stretch; display: flex; align-items: center; justify-content: center; }
+.ic { display: flex; align-items: center; justify-content: center; color: var(--fg-muted); }
+.node .row-added { background: var(--success-muted); } .node .row-added .gut { color: var(--success); }
+.node .row-dropped { background: var(--danger-muted); } .node .row-dropped .gut { color: var(--danger); }
+.node .row-dropped .cn { text-decoration: line-through; text-decoration-color: var(--danger); }
+.node .row-changed .gut { color: var(--attention); }
+.node .row-renamed { background: var(--attention-muted); } .node .row-renamed .gut { color: var(--attention); }
+.node.s-added .nh { background: var(--success-muted); } .node.s-added .nh .gut { color: var(--success); }
+.node.s-dropped .nh { background: var(--danger-muted); } .node.s-dropped .nh .gut { color: var(--danger); }
+.node.s-changed .nh .gut { color: var(--attention); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--bg);
+  font-size: 0.8125rem; color: var(--fg-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.legend .sw { font-family: var(--mono); font-weight: 600; flex: none; white-space: nowrap; }
+.legend svg { flex: none; }
+.legend .sw-nb { width: 14px; height: 10px; border: 1px dashed var(--fg-muted); border-radius: 2px; }
+
+/* 테이블별 diff 블록 */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.btn { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-muted); padding: 3px 12px; font-size: 0.875rem; cursor: pointer; line-height: 20px; }
+.btn:hover { background: var(--border-muted); }
+.diff-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 16px; align-items: start; }
+.toc { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); overflow: hidden; }
+.toc input { margin: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-muted);
+  color: var(--fg); font: 0.875rem var(--font); }
+.toc ul { list-style: none; margin: 0; padding: 0 0 6px; overflow-y: auto; position: relative; }
+.toc a { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 3px 10px 3px 8px;
+  color: var(--fg); text-decoration: none; font-size: 0.875rem; border-left: 2px solid transparent; }
+.toc a:hover { background: var(--bg-muted); }
+.toc a[aria-current="location"] { background: var(--bg-muted); border-left-color: var(--accent); }
+.toc a[aria-current="location"] .n { font-weight: 600; }
+.toc .s { font-family: var(--mono); font-weight: 600; text-align: center; }
+.toc .s-added { color: var(--success); } .toc .s-dropped { color: var(--danger); } .toc .s-changed, .toc .s-renamed { color: var(--attention); }
+.toc .n { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toc .s-dropped + .n { text-decoration: line-through; text-decoration-color: var(--danger); color: var(--fg-muted); }
+.toc .c { font-family: var(--mono); font-size: 0.75rem; display: inline-flex; gap: 4px; font-variant-numeric: tabular-nums; }
+.toc .c .zero { color: var(--fg-muted); }
+.diff-layout.no-toc { grid-template-columns: minmax(0, 1fr); }
+.toc .empty { padding: 4px 12px; color: var(--fg-muted); font-size: 0.8125rem; }
+.blk { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 16px; overflow: clip; }
+.blk-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; background: var(--bg-muted); border: 0;
+  text-align: left; cursor: pointer; flex-wrap: wrap; position: sticky; top: 0; z-index: 1; }
+.blk.open .blk-head { border-bottom: 1px solid var(--border); }
+[tabindex="-1"]:focus { outline: none; }
+.chev { transition: transform .15s; color: var(--fg-muted); flex: none; }
+.blk.open .chev { transform: rotate(90deg); }
+.blk-head .tn { font-family: var(--mono); font-size: 0.875rem; font-weight: 600; }
+.blk-head .tc { color: var(--fg-muted); font-size: 0.875rem; }
+.blk-head .old-name { font-family: var(--mono); font-size: 0.875rem; color: var(--fg-muted); }
+.stat-r { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.boxes { display: inline-flex; gap: 1px; }
+.boxes i { width: 8px; height: 8px; background: var(--neutral-emph); }
+.boxes i.a { background: var(--success); } .boxes i.d { background: var(--danger); } .boxes i.c { background: var(--attention); }
+.map-link { border: 0; background: none; color: var(--accent); font-size: 0.8125rem; cursor: pointer; padding: 0 2px; }
+.map-link:hover { text-decoration: underline; }
+
+.label { display: inline-flex; align-items: center; border: 1px solid; border-radius: 2em; padding: 0 7px; font-size: 0.8125rem; font-weight: 500; line-height: 18px; white-space: nowrap; }
+.label-added { color: var(--success); border-color: var(--success); }
+.label-dropped { color: var(--danger); border-color: var(--danger); }
+.label-changed { color: var(--fg-muted); border-color: var(--border); }
+.label-renamed { color: var(--attention); border-color: var(--attention); }
+.label.whole.label-dropped { background: var(--danger-solid); border-color: var(--danger-solid); color: #fff; font-weight: 600; }
+.label.whole.label-added { background: var(--success-solid); border-color: var(--success-solid); color: #fff; font-weight: 600; }
+.blk.whole-dropped { border-color: var(--danger); }
+.stat-r .whole-cnt { font-family: var(--font); color: var(--fg-muted); }
+.ddlv.whole-dropped .code .cl-dropped { background: none; }
+.ddlv.whole-dropped .code .cl-dropped .cn { background: var(--bg-muted); color: var(--fg-muted); }
+.ddlv.whole-dropped .code .cl-dropped .cs { visibility: hidden; }
+.ddlv.whole-dropped .code .cl-dropped code { opacity: 0.7; text-decoration: line-through; text-decoration-color: var(--danger); }
+.whole-note { padding: 8px 12px; font-size: 0.875rem; border-bottom: 1px solid var(--border-muted); }
+.whole-note.dropped { background: var(--danger-muted); box-shadow: inset 3px 0 var(--danger); }
+.whole-note.added { background: var(--success-muted); box-shadow: inset 3px 0 var(--success); }
+.blk-tools { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--border-muted); }
+.blk-tools .map-link { margin-left: auto; }
+.seg.seg-s button { padding: 1px 10px; font-size: 0.8125rem; }
+
+.blk-body { display: none; }
+.ddlv { display: none; }
+.blk[data-view="ddl"] .dl { display: none; }
+.blk[data-view="ddl"] .ddlv { display: block; }
+.ddl-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 10px; font-size: 0.8125rem; color: var(--fg-muted);
+  border-bottom: 1px solid var(--border-muted); background: var(--bg-muted); }
+.ddl-bar .map-link { white-space: nowrap; flex: none; }
+.blk-body > .code { border-top: 0; }
+.blk.open .blk-body { display: block; }
+/* 이름 칸은 가장 긴 컬럼 줄에 맞춘다(최대 26rem). 제약·인덱스 줄(.kline)은 타입 칸까지 걸쳐 쓰므로 이름 칸 폭에 영향을 주지 않는다 */
+.dl { display: grid; grid-template-columns: 2.75rem fit-content(26rem) minmax(0, 1fr); }
+.dl > .ln { display: contents; }
+.dl > .ln > div { padding: 4px 12px; min-width: 0; }
+.dl .g { font-family: var(--mono); font-size: 0.875rem; text-align: center; color: var(--fg-muted); background: var(--bg-muted); padding-left: 0; padding-right: 0; user-select: none; }
+.dl .nm { font-family: var(--mono); font-size: 0.875rem; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.dl .ty { font-family: var(--mono); font-size: 0.875rem; white-space: nowrap; color: var(--fg); }
+.dl .span { grid-column: 2 / -1; }
+.dl .sub { grid-column: 2 / -1; padding-top: 0 !important; font-size: 0.8125rem; color: var(--fg-muted); }
+.dl .sub-g { background: var(--bg-muted); }
+.ln.same .nm, .ln.same .ty { color: var(--fg-muted); }
+.ln.added > div { background: var(--success-muted); } .ln.added > .g { background: var(--success-emph); color: var(--fg); font-weight: 600; }
+.ln.dropped > div { background: var(--danger-muted); } .ln.dropped > .g { background: var(--danger-emph); color: var(--fg); font-weight: 600; }
+.ln.changed > .g { background: var(--attention-emph); color: var(--fg); font-weight: 600; }
+/* 테이블째 지워지는 컬럼·제약: 줄마다 삭제 표시를 하지 않고 취소선으로 흐리게 */
+.ln.in-dropped .nm, .ln.in-dropped .ty, .ln.in-dropped .sub { color: var(--fg-muted); }
+.ln.in-dropped .nm, .ln.in-dropped .ty { text-decoration: line-through; text-decoration-color: var(--danger); }
+.ln.renamed > div { background: var(--attention-muted); } .ln.renamed > .g { background: var(--attention-emph); color: var(--fg); font-weight: 600; }
+.ln.sep > div { padding-top: 10px; padding-bottom: 4px; font-size: 0.8125rem; color: var(--fg-muted); border-top: 1px solid var(--border-muted); }
+.ln.sep > .g { background: var(--bg-muted); }
+.ln.fold > div { background: var(--accent-muted); }
+.ln.fold button { border: 0; background: none; color: var(--accent); font-size: 0.8125rem; cursor: pointer; padding: 0; }
+del.w { background: var(--danger-emph); color: var(--fg); text-decoration: none; border-radius: 3px; padding: 0 2px; }
+ins.w { background: var(--success-emph); color: var(--fg); text-decoration: none; border-radius: 3px; padding: 0 2px; }
+.to { color: var(--fg-muted); margin: 0 4px; }
+.key { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font); font-size: 0.75rem; font-weight: 600; color: var(--fg-muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; line-height: 16px; white-space: nowrap; }
+.key.k-added { color: var(--success); border-color: var(--success); }
+.key.k-dropped { color: var(--danger); border-color: var(--danger); text-decoration: line-through; }
+.nn { font-family: var(--font); font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); margin-left: 6px; }
+.flag { font-family: var(--font); font-size: 0.7812rem; color: var(--attention); }
+.dl .kind { font-family: var(--font); font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); min-width: 3.25rem; display: inline-block; white-space: nowrap; flex: none; }
+.dl .oname { color: var(--fg-muted); font-size: 0.7812rem; }
+.dl .kline { grid-column: 2 / -1; flex-wrap: nowrap; align-items: baseline; }
+.dl .kline .ktext { min-width: 0; overflow-wrap: anywhere; }
+.dl .kline .oname { margin-left: auto; padding-left: 16px; white-space: nowrap; }
+
+
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--accent); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
+.ln.flash > div { animation: flashbg 1.6s ease-out; }
+@keyframes flashbg { 0%, 40% { background: var(--accent-muted); } }
+footer { color: var(--fg-muted); font-size: 0.8125rem; padding: 24px 0 40px; }
+
+@media (max-width: 1000px) {
+  .diff-layout { grid-template-columns: minmax(0, 1fr); }
+  .toc { position: static; max-height: none; }
+  .toc ul { max-height: 180px; }
+}
+@media (max-width: 760px) {
+  .toolbar { margin-left: 0; }
+  .wrap { padding: 0 16px; }
+  .kpi { padding: 12px; }
+  .risk { grid-template-columns: 1rem minmax(0, 1fr); gap: 2px 10px; }
+  .risk .why { grid-column: 2; }
+  .dl { grid-template-columns: 2.25rem minmax(0, 1fr); }
+  .dl .ty { grid-column: 2; text-align: left; padding-top: 0 !important; white-space: normal; }
+  .dl .kline { flex-wrap: wrap; }
+  .dl .kline .ktext { flex: 1 1 0; }
+  .dl .kline .oname { flex-basis: 100%; margin-left: calc(3.25rem + 8px); padding-left: 0; }
+  .key { white-space: normal; overflow-wrap: anywhere; }
+  .dl > .ln:has(> .ty) > .g { grid-row: span 2; }
+}
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .topbar .seg, #copy-md, .toolbar, .toc, .map-link, .risk-more, .export-menu, .blk-tools { display: none !important; }
+  .risk[hidden] { display: grid !important; }
+  .blk-body { display: block !important; }
+  .blk-head { position: static; }
+  .blk, .node, .risk { break-inside: avoid; }
+  .diff-layout { grid-template-columns: minmax(0, 1fr); }
+  .map-view, .map-frame { overflow: visible; max-height: none; }
+  .map-tip, .fs-bar { display: none !important; }
+  .map-scale { padding: 0; }
+  .map-frame { break-inside: avoid; }
+  .ln.fold button { color: var(--fg-muted); }
+  section.sec { padding-top: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .flash, .ln.flash > div { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <h1 data-en="Schema change review">스키마 변경 리뷰</h1>
+    <span class="src" id="sources"></span>
+    <button class="btn" id="copy-md" title="PR 코멘트에 붙여 넣을 수 있는 Markdown 으로 복사합니다" data-en-title="Copy as Markdown to paste into a PR comment" data-en="Copy review summary">리뷰 요약 복사</button>
+    <span class="sr-only" id="copy-status" aria-live="polite"></span>
+    <textarea id="md-out" class="md-out" readonly hidden aria-label="리뷰 요약 Markdown" data-en-aria-label="Review summary Markdown"></textarea>
+    <div class="seg size" role="group" aria-label="글자 크기" data-en-aria-label="Text size">
+      <button data-size="s" aria-pressed="false" title="글자 작게" data-en-title="Smaller text" data-en="Small">작게</button>
+      <button data-size="m" aria-pressed="true" title="글자 보통" data-en-title="Normal text" data-en="Medium">보통</button>
+      <button data-size="l" aria-pressed="false" title="글자 크게" data-en-title="Larger text" data-en="Large">크게</button>
+    </div>
+    <div class="seg theme" role="group" aria-label="테마" data-en-aria-label="Theme">
+      <button data-theme="auto" aria-pressed="true" data-en="Auto">자동</button>
+      <button data-theme="light" aria-pressed="false" data-en="Light">라이트</button>
+      <button data-theme="dark" aria-pressed="false" data-en="Dark">다크</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <section class="summary">
+    <p class="sr-only" id="headline"></p>
+    <div class="kpis" id="stats" role="list" aria-label="변경 요약" data-en-aria-label="Change summary"></div>
+    <div class="risks">
+      <div class="sec-head"><h2 id="risk-title" data-en="Key changes">주요 변경사항</h2><span class="hint" data-en="Only changes that lose data or need review. Click one to jump to its line">데이터 유실이나 확인이 필요한 변경만 모았습니다. 누르면 해당 줄로 이동합니다</span></div>
+      <div id="risks"></div>
+    </div>
+    <div class="risks" id="checks-sec" hidden>
+      <div class="sec-head"><h2 id="checks-title" data-en="Pre-deploy checks">배포 전 확인 쿼리</h2><span class="hint" data-en="Read-only queries to run on the production database before deploying. This page only writes them and never runs them">운영 DB에서 배포 전에 돌려 볼 읽기 전용 쿼리입니다. 이 화면은 쿼리를 만들기만 하고 실행하지 않습니다</span>
+        <button class="btn" id="checks-copy" data-en="Copy all">모두 복사</button></div>
+      <details class="checks-box"><summary id="checks-sum"></summary><pre class="checks" id="checks"></pre></details>
+    </div>
+    <div class="risks" id="hints-sec" hidden>
+      <div class="sec-head"><h2 id="hints-title" data-en="Locking hints">잠금 힌트</h2><span class="hint" data-en="Changes that can lock or rewrite a table on a live database. Typical engine behaviour; the real impact depends on version, settings and table size">운영 중 실행하면 테이블을 잠그거나 다시 쓸 수 있는 변경입니다. 엔진의 일반 동작이며 버전·설정·테이블 크기에 따라 다릅니다</span></div>
+      <div id="hints"></div>
+    </div>
+    <div class="risks" id="objs-sec" hidden>
+      <div class="sec-head"><h2 id="objs-title" data-en="Other objects">기타 객체</h2><span class="hint" data-en="Triggers, functions and other objects that the table and view diff does not cover">테이블·뷰 비교에 잡히지 않는 트리거·함수 등입니다</span></div>
+      <div id="objs"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="map-sec">
+    <div class="sec-head">
+      <h2 data-en="Diagram">관계도</h2>
+      <span class="hint" id="map-hint" data-en="Click a table to jump to its changes below">테이블을 누르면 아래 변경 내용으로 이동합니다</span>
+      <div class="toolbar">
+        <input type="search" class="map-find" id="map-find" placeholder="테이블 찾기" data-en-placeholder="Find table" aria-label="관계도에서 테이블 찾기 (Enter 로 이동)" data-en-aria-label="Find a table in the diagram (Enter to jump)" autocomplete="off" spellcheck="false"><span class="map-find-n" id="map-find-n" aria-live="polite"></span>
+        <div class="seg" role="group" aria-label="관계도 범위" data-en-aria-label="Diagram scope" id="scope-seg">
+          <button data-scope="focus" aria-pressed="false" data-en="Changed only">변경 주변</button>
+          <button data-scope="all" aria-pressed="true" data-en="All">전체</button>
+        </div>
+        <div class="seg zoom-seg" role="group" aria-label="관계도 크기" data-en-aria-label="Diagram zoom">
+          <button data-zoom="out" aria-label="축소" title="축소 (−)" data-en-aria-label="Zoom out" data-en-title="Zoom out (−)">−</button>
+          <button data-zoom="fit" aria-pressed="true" id="zoom-fit" class="zoom-val" title="프레임 폭에 맞추기 (F)" data-en-title="Fit to frame width (F)" data-en="Fit">맞춤</button>
+          <button data-zoom="in" aria-label="확대" title="확대 (+)" data-en-aria-label="Zoom in" data-en-title="Zoom in (+)">+</button>
+          <button data-zoom="1" aria-pressed="false" title="원래 크기 (0)" data-en-title="Actual size (0)">100%</button>
+          <button data-zoom="full" id="zoom-full" title="전체 화면으로 보기" data-en-title="View fullscreen" data-en="Fullscreen">크게 보기</button>
+        </div>
+        <div class="seg" role="group" aria-label="관계도 보기" data-en-aria-label="Diagram view" id="mode-seg">
+          <button data-mode="before" aria-pressed="false" data-en="Before">변경 전</button>
+          <button data-mode="merged" aria-pressed="true" data-en="Merged">합쳐 보기</button>
+          <button data-mode="after" aria-pressed="false" data-en="After">변경 후</button>
+        </div>
+        <details class="export-menu" id="export-menu">
+          <summary class="btn" data-en="Export">내보내기</summary>
+          <div class="menu" role="group" aria-label="관계도 내보내기" data-en-aria-label="Export diagram">
+            <button data-export="mermaid" data-en="Copy Mermaid ERD">Mermaid ERD 복사</button>
+            <button data-export="mmd" data-en="Save Mermaid file (.mmd)">Mermaid 파일 저장 (.mmd)</button>
+            <button data-export="svg" data-en="Save image (SVG)">그림 저장 (SVG)</button>
+            <button data-export="png" data-en="Save image (PNG)">그림 저장 (PNG)</button>
+            <p class="menu-note" data-en="Exports the current scope and view (before or after) as shown. In Mermaid, Merged exports the After state.">지금 보이는 범위와 보기(변경 전·후) 그대로 내보냅니다. 합쳐 보기는 Mermaid 에서 변경 후 기준입니다.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="map-frame" id="map-frame">
+      <div class="fs-bar"><b data-en="Diagram">관계도</b><span class="hint" data-en="Drag to pan · Ctrl(⌘)+wheel to zoom · Esc to close">끌어서 이동 · Ctrl(⌘)+휠로 확대·축소 · Esc 로 닫기</span>
+        <div class="seg zoom-seg" role="group" aria-label="전체 화면 관계도 크기" data-en-aria-label="Fullscreen diagram zoom">
+          <button data-zoom="out" aria-label="축소" data-en-aria-label="Zoom out">−</button>
+          <button data-zoom="fit" class="zoom-val" aria-pressed="true" data-en="Fit">맞춤</button>
+          <button data-zoom="in" aria-label="확대" data-en-aria-label="Zoom in">+</button>
+          <button data-zoom="1" aria-pressed="false">100%</button>
+          <button data-zoom="full" data-en="Close">닫기</button>
+        </div></div>
+      <div class="map-view" id="map-view" tabindex="0" aria-label="관계도 보기 창. 끌어서 이동, Ctrl 또는 ⌘ 와 휠로 확대·축소, + − 0 F 키" data-en-aria-label="Diagram viewport. Drag to pan, Ctrl or ⌘ + wheel to zoom, + − 0 F keys"><div class="map-scale" id="map-scale">
+        <div class="map" id="map"><svg class="edges" id="edges" aria-hidden="true"></svg><svg class="edges labels" id="edge-labels" aria-hidden="true"></svg></div>
+      </div></div>
+      <div class="map-tip" data-en="Drag to pan · Ctrl(⌘)+wheel or pinch to zoom · click the viewport, then use + − 0 F keys">끌어서 이동 · Ctrl(⌘)+휠이나 두 손가락 오므리기로 확대·축소 · 보기 창을 누른 뒤 + − 0 F 키</div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="diff-sec">
+    <div class="sec-head">
+      <h2 data-en="Changes by table">테이블별 변경</h2>
+      <span class="hint" id="diff-hint"></span>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="변경 보기 방식" data-en-aria-label="Change view mode" id="view-seg">
+          <button data-view="struct" aria-pressed="true" data-en="Structure">구조</button>
+          <button data-view="ddl" aria-pressed="false" data-en="Full SQL">전체 SQL</button>
+        </div>
+        <button class="btn" id="expand-all" data-en="Expand all">모두 펼치기</button>
+        <button class="btn" id="collapse-all" data-en="Collapse all">모두 접기</button>
+      </div>
+    </div>
+    <div class="diff-layout">
+      <nav class="toc" id="toc" aria-label="변경된 테이블 목록" data-en-aria-label="Changed tables">
+        <input type="search" id="toc-filter" placeholder="테이블 이름으로 거르기" aria-label="테이블 이름으로 거르기" data-en-placeholder="Filter by table name" data-en-aria-label="Filter by table name">
+        <ul id="toc-list"></ul>
+      </nav>
+      <div id="blocks"></div>
+    </div>
+  </section>
+
+  <footer id="note"></footer>
+</main>
+
+<script id="data" type="application/json">/*__DATA__*/</script>
+<script>
+/*__SQLVIEW_JS__*/
+/*__EXPORT_JS__*/
+/*__RISKS_JS__*/
+const D = JSON.parse(document.getElementById('data').textContent);
+const state = { mode: 'merged', zoom: 'fit', scope: 'all', mapW: 0, mapH: 0, pinned: null, pinSeen: false };
+
+const ROW_H = 24, HEAD_H = 32, NODE_W = 216, RANK_GAP = 64, NODE_GAP = 28, MIN_ZOOM = 0.2, MAX_ZOOM = 2;
+const ZOOM_STEPS = [0.2, 0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2];
+const SIGN = { added: '+', dropped: '−', changed: 'Δ', renamed: '↻', same: '' };
+const NONE = L('없음', 'none');
+const NULLABLE = L('NULL 허용', 'Nullable');
+const MAP_HINT = L('테이블을 누르면 아래 변경 내용으로 이동합니다', 'Click a table to jump to its changes below');
+const STATUS_LABEL = { added: L('추가', 'Added'), dropped: L('삭제', 'Dropped'), changed: L('변경', 'Changed'), renamed: L('이름 변경 의심', 'Possible rename') };
+const { RENAME_HINT, RECREATE_HINT, objNoun } = riskTexts(L);
+/** 뷰 블록·목록의 상태 표기. */
+const viewLabel = st => L(`뷰 ${STATUS_LABEL[st]}`, `View ${STATUS_LABEL[st].toLowerCase()}`);
+/** 이름 변경은 근거(confidence)에 따라 "이름 변경" 또는 "이름 변경 의심"이다. */
+const statusLabel = x => x.status === 'renamed' && confirmed(x) ? L('이름 변경', 'Renamed') : STATUS_LABEL[x.status];
+/** 테이블 블록 머리말의 상태. 테이블째 추가·삭제·다시 만듦은 컬럼 단위 변경과 구분되게 쓴다. */
+const tableLabel = t => t.status === 'dropped' ? L('테이블 삭제', 'Table dropped') : t.status === 'added' ? L('새 테이블', 'New table') : t.recreated ? L('테이블 다시 만듦', 'Table recreated') : statusLabel(t);
+/** 테이블째 데이터가 바뀌는지(추가·삭제·다시 만듦). 머리말을 채운 라벨로 그린다. */
+const wholeTable = t => isWhole(t) || !!t.recreated;
+const rowTitle = (st, r) => ({ added: L('컬럼 추가', 'Column added'), dropped: L('컬럼 삭제', 'Column dropped'), changed: L('컬럼 변경', 'Column changed'),
+  renamed: confirmed(r) ? L('컬럼 이름 변경', 'Column renamed') : L('컬럼 이름 변경 의심', 'Possible column rename') })[st];
+const KEY_TITLE = { added: L('제약·인덱스 추가', 'Constraint or index added'), dropped: L('제약·인덱스 삭제', 'Constraint or index dropped'), changed: L('제약·인덱스 변경', 'Constraint or index changed') };
+/** 통째로 추가·삭제된 테이블의 구성: 컬럼 수와 제약·인덱스 수. */
+const wholeCount = t => {
+  const k = t.constraints.length + t.indexes.length;
+  return L(`컬럼 ${t.columns.length}${k ? ` · 제약·인덱스 ${k}` : ''}`,
+    `${plural(t.columns.length, 'column')}${k ? ` · ${plural(k, 'constraint/index', 'constraints/indexes')}` : ''}`);
+};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const shortDefault = d => d == null ? null : /^nextval\(/.test(d) ? 'auto'
+  : d.replace(/::[a-z ]+(\(\d+(,\d+)?\))?/g, '');
+const tableKey = t => 'tb-' + encodeURIComponent(t);
+const rowKey = (t, c) => 'col-' + encodeURIComponent(t) + ':' + encodeURIComponent(c);
+const refTable = name => D.tables.find(x => x.name === name) || D.tables.find(x => x.before_name === name);
+/**
+ * +3 −0 Δ1 ↻1 같은 건수 표시. 0 은 흐리게 그린다.
+ * @param c 변경 건수. null 이면 Δ 항목을 생략한다.
+ * @param r 이름 변경 의심 건수. 0 보다 클 때만 ↻ 항목을 붙인다.
+ */
+const counts = (a, d, c, sep = ' ', r = 0) => [['n-add', '+', a], ['n-del', '−', d], ['n-chg', 'Δ', c], ['n-chg', '↻', r || null]]
+  .filter(([, , n]) => n != null)
+  .map(([cls, sg, n]) => `<span class="${cls}${n ? '' : ' zero'}">${sg}${n}</span>`).join(sep);
+
+const ICON = {
+  hint: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M4 4a4 4 0 0 1 8 0v2h.25c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5C2 6.784 2.784 6 3.75 6H4Zm6.5 2V4a2.5 2.5 0 0 0-5 0v2Z"/></svg>',
+  chevron: '<svg class="chev" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>',
+  key: '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h6.5M12 8v2.5M14.5 8v2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  link: '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  nn: '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1l4 4-4 4-4-4z" fill="currentColor"/></svg>',
+  nul: '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 1.5L8.5 5 5 8.5 1.5 5z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+  danger: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2.343 13.657A8 8 0 1 1 13.66 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.75.75 0 0 0-1.06 1.06L6.94 8 4.97 9.97a.75.75 0 1 0 1.06 1.06L8 9.06l1.97 1.97a.75.75 0 1 0 1.06-1.06L9.06 8l1.97-1.97a.75.75 0 1 0-1.06-1.06L8 6.94 6.03 4.97Z"/></svg>',
+  attention: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>',
+};
+
+/* ---------- 파생 데이터 ---------- */
+
+/** 컬럼 행의 현재 보기 기준 값(변경 전·후 중 하나). */
+const side = (r, mode) => mode === 'before' ? r.before : mode === 'after' ? r.after : (r.after || r.before);
+const visibleIn = (status, mode) => mode === 'before' ? status !== 'added' : mode === 'after' ? status !== 'dropped' : true;
+const fks = t => t.constraints.filter(k => k.kind === 'f');
+
+/** 테이블 하나의 diffstat: 추가·삭제·변경 건수. */
+function tableStat(t) {
+  const items = [...t.columns, ...t.constraints, ...t.indexes];
+  return {
+    add: items.filter(x => x.status === 'added').length,
+    del: items.filter(x => x.status === 'dropped').length,
+    chg: t.columns.filter(x => x.status === 'changed' || x.status === 'renamed').length,
+  };
+}
+
+/** 테이블·뷰 비교 밖의 객체(트리거·함수 등). 값이 없는 데이터(구버전)는 빈 목록이다. */
+const OBJS = normObjects(D.objects);
+/** 비교 데이터 D 의 위험 목록(templates/risks.js). */
+function collectRisks() { return computeRisks(D); }
+function collectHints() { return computeHints(D); }
+
+/* ---------- 요약 ---------- */
+
+/** 객체 하나를 한 상태로 센 건수. 우선순위는 삭제, 컴파일 오류, 추가, 변경. */
+function objectStates() {
+  const seen = new Set(), n = { added: 0, dropped: 0, changed: 0, invalid: 0 };
+  for (const k of ['dropped', 'invalid', 'added', 'changed']) for (const o of OBJS[k]) if (!seen.has(objKey(o))) { seen.add(objKey(o)); n[k]++; }
+  return n;
+}
+
+/** "기타 객체" 목록 행: 객체별 한 줄. 컴파일 오류 상태는 변경 종류와 별개로 상태 칸에 표시한다. */
+function objectRows() {
+  const rows = new Map(), invalid = new Set(OBJS.invalid.map(objKey));
+  for (const [k, label, cls] of [['added', L('추가', 'Added'), 'n-add'], ['dropped', L('삭제', 'Dropped'), 'n-del'], ['changed', L('변경', 'Changed'), 'n-chg'], ['invalid', L('컴파일 오류', 'Invalid'), 'n-del']]) {
+    for (const o of OBJS[k]) {
+      const key = objKey(o);
+      if (!rows.has(key)) rows.set(key, { o, label, cls });
+      if (invalid.has(key)) rows.get(key).bad = true;
+    }
+  }
+  return [...rows.values()];
+}
+
+function renderObjects() {
+  const rows = objectRows(), sec = document.getElementById('objs-sec'), box = document.getElementById('objs');
+  sec.hidden = !rows.length;
+  if (!rows.length) { box.innerHTML = ''; return; }
+  document.getElementById('objs-title').textContent = L(`기타 객체 ${rows.length}건`, `Other objects (${rows.length})`);
+  box.innerHTML = `<div class="risk-list obj-list">${rows.map(({ o, label, cls, bad }) => `<div class="obj">
+      <span class="obj-kind ${cls}">${label}</span><span class="obj-type">${esc(objNoun(o.type))}</span>
+      <span class="obj-name">${esc(o.name)}${o.table ? `<span class="obj-on"> · ${esc(o.table)}</span>` : ''}${o.step ? `<span class="obj-on"> · ${esc(o.step)}</span>` : ''}</span>
+      ${bad || o.status === 'INVALID' ? `<span class="obj-st bad">INVALID</span>` : o.status ? `<span class="obj-st">${esc(o.status)}</span>` : ''}</div>`).join('')}</div>`;
+}
+
+function renderSummary() {
+  document.getElementById('sources').innerHTML = `<b>${esc(D.before.source)}</b> → <b>${esc(D.after.source)}</b>`;
+  const T = s => D.tables.filter(t => t.status === s).length;
+  const kept = D.tables.filter(t => !isWhole(t) && !t.recreated);
+  const cols = kept.flatMap(t => t.columns);
+  const C = s => cols.filter(c => c.status === s).length;
+  const V = s => D.views.filter(v => v.status === s).length;
+  const objSt = objectStates(), objTotal = objSt.added + objSt.dropped + objSt.changed + objSt.invalid;
+  const ki = kept.flatMap(t => [...t.constraints, ...t.indexes]);
+  const K = s => ki.filter(x => x.status === s).length;
+  const touched = kept.filter(t => t.comment.before !== t.comment.after
+    || [...t.columns, ...t.constraints, ...t.indexes].some(x => x.status !== 'same')).length;
+
+  const list = pairs => pairs.filter(([, n]) => n).map(([l, n]) => L(`${n}개 ${l}`, `${n} ${l.toLowerCase()}`)).join(', ');
+  const sentences = [];
+  const R = (xs, sure) => xs.filter(x => x.status === 'renamed' && confirmed(x) === sure).length;
+  const tl = list([[L('추가', 'Added'), T('added')], [L('삭제', 'Dropped'), T('dropped')], [L('이름 변경', 'Renamed'), R(D.tables, true)], [L('이름 변경 의심', 'Possible rename'), R(D.tables, false)]]);
+  if (tl) sentences.push(L(`테이블 ${tl}.`, `Tables: ${tl}.`));
+  const recreated = D.tables.filter(t => t.recreated).length;
+  if (recreated) sentences.push(L(`테이블 ${recreated}개 다시 만듦(기존 행 모두 사라짐).`, `${plural(recreated, 'table')} recreated (all rows lost).`));
+  if (touched) {
+    const inner = [];
+    const cl = list([[L('추가', 'Added'), C('added')], [L('삭제', 'Dropped'), C('dropped')], [L('변경', 'Changed'), C('changed')], [L('이름 변경', 'Renamed'), R(cols, true)], [L('이름 변경 의심', 'Possible rename'), R(cols, false)]]);
+    if (cl) inner.push(L(`컬럼 ${cl}`, `columns ${cl}`));
+    const kc = K('added') + K('dropped');
+    if (kc) inner.push(L(`제약·인덱스 ${kc}건 변경`, `${plural(kc, 'constraint/index change', 'constraint/index changes')}`));
+    sentences.push(inner.length ? L(`기존 테이블 ${touched}개에서 ${inner.join(', ')}.`, `In ${plural(touched, 'existing table')}: ${inner.join('; ')}.`)
+      : L(`기존 테이블 ${touched}개 변경.`, `${plural(touched, 'existing table')} changed.`));
+  }
+  const vl = list([[L('추가', 'Added'), V('added')], [L('삭제', 'Dropped'), V('dropped')], [L('변경', 'Changed'), V('changed')]]);
+  if (vl) sentences.push(L(`뷰 ${vl}.`, `Views: ${vl}.`));
+  const ol = list([[L('추가', 'Added'), objSt.added], [L('삭제', 'Dropped'), objSt.dropped], [L('변경', 'Changed'), objSt.changed], [L('컴파일 오류', 'Invalid'), objSt.invalid]]);
+  if (ol) sentences.push(L(`기타 객체 ${ol}.`, `Other objects: ${ol}.`));
+  document.getElementById('headline').textContent = sentences.join(' ') || L('두 스키마가 같습니다.', 'The two schemas are identical.');
+
+  const risks = collectRisks();
+  const loss = risks.filter(r => r.level === 'danger').length, warn = risks.length - loss, whole = risks.filter(r => r.whole).length;
+  const nStep = risks.filter(r => r.kind === 'step').length, nInvalid = risks.filter(r => r.kind === 'invalid').length;
+  /** 종류 하나의 칸: 변경 건수, 구성 막대, 0 이 아닌 항목만 적은 범례. */
+  const cell = (lbl, parts, empty = '') => {
+    const total = parts.reduce((n, [, , v]) => n + v, 0);
+    const shown = parts.filter(([, , v]) => v);
+    const bar = total ? shown.map(([cls, , v]) => `<i class="${cls}" style="width:${(v / total * 100).toFixed(2)}%"></i>`).join('') : '';
+    return `<div class="kpi" role="listitem"><div class="lbl">${lbl}</div>
+      <div class="val${total ? '' : ' zero'}">${total}<span class="unit">${L('건', '')}</span></div>
+      <div class="bar" aria-hidden="true">${bar}</div>
+      <div class="kpi-legend">${shown.length ? shown.map(([cls, name, v]) => `<span class="${cls}">${name} <b>${v}</b></span>`).join('') : empty || L('변경 없음', 'No changes')}</div></div>`;
+  };
+  const checkBar = risks.length ? `<i class="c-del" style="width:${(loss / risks.length * 100).toFixed(2)}%"></i><i class="c-chg" style="width:${(warn / risks.length * 100).toFixed(2)}%"></i>` : '';
+  const checkCell = `<div class="kpi check" role="listitem"><div class="lbl">${L('주요 변경사항', 'Key changes')}</div>
+      <div class="val ${loss ? 'bad' : warn ? 'warn' : 'zero'}">${risks.length}<span class="unit">${L('건', '')}</span></div>
+      <div class="bar" aria-hidden="true">${checkBar}</div>
+      <div class="kpi-legend">${risks.length
+        ? [whole && `<span class="c-del">${L('테이블째 유실', 'Whole-table loss')} <b>${whole}</b></span>`, loss - whole - nStep - nInvalid && `<span class="c-del">${L('컬럼 등 유실', 'Column-level loss')} <b>${loss - whole - nStep - nInvalid}</b></span>`,
+          nStep && `<span class="c-del">${L('유실 가능 단계', 'Steps that may lose data')} <b>${nStep}</b></span>`, nInvalid && `<span class="c-del">${L('컴파일 오류 객체', 'Invalid objects')} <b>${nInvalid}</b></span>`,
+          warn && `<span class="c-chg">${L('확인 필요', 'Needs review')} <b>${warn}</b></span>`].filter(Boolean).join('')
+        : L('유실·적용 실패 예상 없음', 'No data loss or failures expected')}</div></div>`;
+  const P = (a, d, c, r) => [['c-add', L('추가', 'Added'), a], ['c-del', L('삭제', 'Dropped'), d], ['c-chg', L('변경', 'Changed'), c], ['c-ren', L('이름 변경', 'Renamed'), r]];
+  document.getElementById('stats').innerHTML = [
+    checkCell,
+    cell(L('테이블', 'Tables'), [...P(T('added'), T('dropped'), T('changed') - recreated, T('renamed')), ['c-del', L('다시 만듦', 'Recreated'), recreated]]),
+    cell(L('컬럼 (기존 테이블)', 'Columns (existing tables)'), P(C('added'), C('dropped'), C('changed'), C('renamed')), kept.length ? '' : L('기존 테이블 없음', 'No existing tables')),
+    cell(L('제약 · 인덱스', 'Constraints & indexes'), P(K('added'), K('dropped'), 0, 0)),
+    cell(L('뷰', 'Views'), P(V('added'), V('dropped'), V('changed'), 0)),
+    objTotal ? cell(L('기타 객체', 'Other objects'), [['c-add', L('추가', 'Added'), objSt.added], ['c-del', L('삭제', 'Dropped'), objSt.dropped], ['c-chg', L('변경', 'Changed'), objSt.changed], ['c-del', L('오류', 'Invalid'), objSt.invalid]]) : '',
+  ].join('');
+  document.getElementById('stats').classList.toggle('n6', objTotal > 0);
+  renderObjects();
+
+  renderChecks(risks);
+  renderHints();
+  document.getElementById('risk-title').textContent = risks.length ? L(`주요 변경사항 ${risks.length}건`, `Key changes (${risks.length})`) : L('주요 변경사항', 'Key changes');
+  const box = document.getElementById('risks');
+  box.parentElement.hidden = !risks.length;
+  if (!risks.length) { box.innerHTML = ''; return; }
+  const LIMIT = 6;
+  const LEVEL = { danger: L('데이터 유실', 'Data loss'), attention: L('확인 필요', 'Needs review') };
+  const item = (r, i) => `<button class="risk" data-i="${i}"${i >= LIMIT ? ' hidden' : ''}>
+      <span class="lvl lvl-${r.level}" title="${r.tag || LEVEL[r.level]}">${ICON[r.level]}<span class="sr-only">${r.tag || LEVEL[r.level]}</span></span>
+      <span class="what">${esc(r.what)}</span><span class="why">${r.lead ? `<b class="lead${r.whole ? ' whole' : ''}">${esc(r.lead)}</b> · ` : ''}${esc(r.why)}</span></button>`;
+  /** 고정폭 글꼴 기준 칸 수. 한글 같은 전각 글자는 2칸으로 센다. */
+  const cells = x => [...x].reduce((n, ch) => n + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1), 0);
+  const whatW = Math.min(40, Math.max(10, ...risks.map(r => cells(r.what)))) + 1;
+  box.innerHTML = `<div class="risk-list" style="--what-w:${whatW}ch">${risks.map(item).join('')}${risks.length > LIMIT ? `<button class="risk-more">${L(`${risks.length - LIMIT}건 더 보기`, `Show ${risks.length - LIMIT} more`)}</button>` : ''}</div>`;
+  box.querySelectorAll('.risk').forEach(b => b.addEventListener('click', () => {
+    const r = risks[+b.dataset.i];
+    if (r.kind === 'step') parent.postMessage({ type: 'schema-timeline:select', step: r.step }, '*');
+    else if (r.table) focusRow(r.table, r.col);
+  }));
+  box.querySelector('.risk-more')?.addEventListener('click', e => {
+    const shown = [...box.querySelectorAll('.risk[hidden]')];
+    shown.forEach(x => x.hidden = false);
+    e.target.remove();
+    shown[0]?.focus();
+  });
+}
+
+/** 배포 전 확인 쿼리 묶음. 확인 쿼리가 있는 위험이 없으면 숨긴다. */
+function renderChecks(risks) {
+  const sql = checkScript(risks), n = risks.filter(r => r.check).length;
+  document.getElementById('checks-sec').hidden = !n;
+  document.getElementById('checks').textContent = sql;
+  document.getElementById('checks-sum').textContent = L(`쿼리 ${n}개 보기`, `Show ${plural(n, 'query', 'queries')}`);
+}
+
+/** 잠금 힌트 목록. 누르면 해당 테이블·컬럼으로 이동한다. */
+function renderHints() {
+  const hints = collectHints(), box = document.getElementById('hints');
+  document.getElementById('hints-sec').hidden = !hints.length;
+  document.getElementById('hints-title').textContent = hints.length ? L(`잠금 힌트 ${hints.length}건`, `Locking hints (${hints.length})`) : L('잠금 힌트', 'Locking hints');
+  if (!hints.length) { box.innerHTML = ''; return; }
+  const whatW = Math.min(44, Math.max(10, ...hints.map(h => [...h.what].length))) + 3;
+  box.innerHTML = `<div class="risk-list" style="--what-w:${whatW}ch">${hints.map((h, i) => `<button class="risk" data-h="${i}"><span class="lvl lvl-hint" title="${esc(h.lead)}">${ICON.hint}<span class="sr-only">${esc(h.lead)}</span></span>
+    <span class="what">${esc(h.what)}</span><span class="why"><b class="lead">${esc(h.lead)}</b> · ${esc(h.why)}</span></button>`).join('')}</div>`;
+  box.querySelectorAll('[data-h]').forEach(b => b.addEventListener('click', () => { const h = hints[+b.dataset.h]; focusRow(h.table, h.col); }));
+}
+
+/* ---------- 관계도 ---------- */
+
+/*
+ * 관계도 범위. focus 는 변경된 테이블과 이웃 테이블만 그린다.
+ * 이웃은 변경된 테이블이 참조하는 테이블, 그리고 참조하는 컬럼이 바뀌어 영향을 받는 테이블이다.
+ */
+const CHANGED = new Set(D.tables.filter(t => t.status !== 'same').map(t => t.name));
+const NEIGHBOR = new Set();
+/** 이웃 테이블별로, 변경된 테이블과 이어지는 컬럼 이름. */
+const LINK = new Map();
+/** 참조받는 테이블 rt 에서 cols 중 하나라도 바뀌었거나 테이블 자체가 사라지거나 이름이 바뀌었는지. */
+const refImpacted = (rt, cols) => rt.status === 'dropped' || rt.status === 'renamed' || rt.recreated
+  || cols.some(c => rt.columns.some(x => (x.name === c || x.before?.name === c)
+    && (x.status === 'renamed' || x.status === 'dropped' || x.recreated || x.changes.some(f => f === 'type' || f === 'nullable'))));
+for (const t of D.tables) for (const k of fks(t)) {
+  const rt = refTable(k.ref_table), r = rt?.name;
+  if (!r || r === t.name || CHANGED.has(t.name) === CHANGED.has(r)) continue;
+  if (!CHANGED.has(t.name) && !refImpacted(rt, k.ref_columns || [])) continue;
+  const [nb, cols] = CHANGED.has(t.name) ? [r, k.ref_columns || []] : [t.name, k.columns || []];
+  NEIGHBOR.add(nb);
+  if (!LINK.has(nb)) LINK.set(nb, new Set());
+  cols.forEach(c => LINK.get(nb).add(c));
+}
+for (const t of D.tables) for (const k of fks(t)) {
+  const r = refTable(k.ref_table)?.name;
+  if (NEIGHBOR.has(t.name) && CHANGED.has(r)) (k.columns || []).forEach(c => LINK.get(t.name).add(c));
+}
+const inScope = name => state.scope === 'all' || CHANGED.has(name) || NEIGHBOR.has(name);
+const edgeInScope = (a, b) => state.scope === 'all' || CHANGED.has(a) || CHANGED.has(b);
+const compact = t => state.scope === 'focus' && NEIGHBOR.has(t.name);
+
+/** 노드에 그릴 컬럼 행. 접힌 이웃 노드는 연결 컬럼만 남기고 나머지 개수를 more 로 돌려준다. */
+function rowsOf(t, mode) {
+  const all = t.columns.filter(r => visibleIn(r.status, mode));
+  if (!compact(t)) return { rows: all, more: 0 };
+  const keep = LINK.get(t.name);
+  const rows = all.filter(r => keep.has(r.name));
+  return { rows, more: all.length - rows.length };
+}
+
+/**
+ * 보기 모드와 상관없이 합쳐 보기(merged) 행 기준으로 좌표를 정한다. 참조되는 테이블이 왼쪽 열에 온다.
+ * 관계가 없는 테이블은 맨 오른쪽 열에 모은다. 범위(state.scope) 밖 테이블은 넣지 않는다.
+ * @return {Map<string, {x:number, y:number, h:number, rank:number}>}
+ */
+function layout() {
+  const tables = D.tables.filter(t => inScope(t.name));
+  const byName = new Map(tables.map(t => [t.name, t]));
+  const out = new Map(tables.map(t => [t.name, fks(t).map(k => refTable(k.ref_table)?.name)
+    .filter(r => byName.has(r) && r !== t.name && edgeInScope(t.name, r))]));
+  const linked = new Set();
+  for (const [n, refs] of out) if (refs.length) { linked.add(n); refs.forEach(r => linked.add(r)); }
+  const rank = new Map();
+  const visit = (n, seen = new Set()) => {
+    if (rank.has(n)) return rank.get(n);
+    if (seen.has(n)) return 0;
+    seen.add(n);
+    const r = out.get(n).length ? 1 + Math.max(...out.get(n).map(m => visit(m, seen))) : 0;
+    rank.set(n, r);
+    return r;
+  };
+  tables.forEach(t => visit(t.name));
+  const maxRank = Math.max(0, ...[...linked].map(n => rank.get(n)));
+  for (const t of tables) if (!linked.has(t.name)) rank.set(t.name, linked.size ? maxRank + 1 : 0);
+  const used = [...new Set(rank.values())].sort((a, b) => a - b);
+  for (const [n, r] of rank) rank.set(n, used.indexOf(r));
+
+  const pos = new Map();
+  const cols = [];
+  for (const t of tables) (cols[rank.get(t.name)] ||= []).push(t);
+  cols.forEach((list, r) => {
+    if (!list) return;
+    if (r > 0) {
+      const center = t => {
+        const ys = out.get(t.name).map(n => pos.get(n)).filter(Boolean).map(p => p.y + p.h / 2);
+        return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity;
+      };
+      list.sort((a, b) => center(a) - center(b));
+    }
+    let y = 0;
+    for (const t of list) {
+      const { rows, more } = rowsOf(t, 'merged');
+      const h = HEAD_H + (rows.length + (more ? 1 : 0)) * ROW_H + 2;
+      pos.set(t.name, { x: r * (NODE_W + RANK_GAP), y, h, rank: r });
+      y += h + NODE_GAP;
+    }
+  });
+  return pos;
+}
+let POS;
+
+function nodeHtml(t, mode) {
+  const st = mode === 'merged' ? t.status : 'same';
+  const name = mode === 'before' && t.before_name ? t.before_name : t.name;
+  const comment = (mode === 'before' ? t.comment.before : mode === 'after' ? t.comment.after : t.comment.after ?? t.comment.before) ?? '';
+  const keyOf = r => {
+    const ks = t.constraints.filter(k => visibleIn(k.status, mode) && [r.name, r.before?.name].some(n => (k.columns || []).includes(n)));
+    if (ks.some(k => k.kind === 'p')) return ['pk', ICON.key, 'PK'];
+    if (ks.some(k => k.kind === 'f')) return ['fk', ICON.link, 'FK'];
+    return null;
+  };
+  const { rows: shown, more } = rowsOf(t, mode);
+  const rows = shown.map(r => {
+    const v = side(r, mode);
+    const k = keyOf(r);
+    const rs = mode === 'merged' ? r.status : 'same';
+    const icon = k ? `<span class="ic" title="${k[2]}">${k[1]}</span>` : `<span class="ic" title="${v.nullable ? NULLABLE : 'NOT NULL'}">${v.nullable ? ICON.nul : ICON.nn}</span>`;
+    return `<div class="nr row-${rs}" data-row="${esc(r.name)}">
+      <span class="gut">${SIGN[rs]}</span>${icon}<span class="cn">${esc(v.name)}</span><span class="ct">${esc(shortType(v.type))}</span></div>`;
+  }).join('') + (more ? `<div class="nr more"><span></span><span></span><span class="cn">${L(`컬럼 ${more}개 접음`, `${plural(more, 'column')} hidden`)}</span><span></span></div>` : '');
+  return `<div class="nh"><span class="gut">${SIGN[st]}</span><span class="tn">${esc(name)}</span><span class="tc">${esc(comment)}</span></div>${rows}`;
+}
+
+function renderMap() {
+  POS = layout();
+  const map = document.getElementById('map');
+  map.querySelectorAll('.node').forEach(n => n.remove());
+  let w = 0, h = 0;
+  for (const t of D.tables) {
+    const p = POS.get(t.name);
+    if (!p) continue;
+    w = Math.max(w, p.x + NODE_W); h = Math.max(h, p.y + p.h);
+    if (!visibleIn(t.status, state.mode)) continue;
+    const el = document.createElement('div');
+    el.className = `node s-${state.mode === 'merged' ? t.status : 'same'}${compact(t) ? ' neighbor' : ''}`;
+    el.dataset.table = t.name;
+    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+    if (CHANGED.has(t.name)) {
+      el.setAttribute('role', 'button'); el.tabIndex = 0;
+      el.setAttribute('aria-label', L(`${t.name} 테이블 (${tableLabel(t)}), 변경 내용으로 이동`, `Table ${t.name} (${tableLabel(t)}), jump to its changes`));
+      el.addEventListener('click', () => focusRow(t.name));
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focusRow(t.name); } });
+    } else {
+      el.classList.add('static');
+    }
+    el.innerHTML = nodeHtml(t, state.mode);
+    for (const [ev, on] of [['mouseenter', true], ['mouseleave', false], ['focus', true], ['blur', false]]) el.addEventListener(ev, () => hot(t.name, on));
+    map.appendChild(el);
+  }
+  renderScopeHint();
+  renderLegend();
+  const selfRef = D.tables.some(t => POS.has(t.name) && fks(t).some(k => refTable(k.ref_table)?.name === t.name && edgeInScope(t.name, t.name)));
+  if (selfRef) w += RANK_GAP + 96;
+  map.style.width = w + 'px'; map.style.height = h + 'px';
+  state.mapW = w; state.mapH = h;
+  drawEdges(w, h);
+  applyZoom();
+}
+
+/** 범위 버튼과 생략 안내를 갱신한다. 변경 없는 테이블이 없으면 범위 버튼을 숨긴다. */
+function renderScopeHint() {
+  const group = document.getElementById('scope-seg');
+  group.hidden = CHANGED.size === D.tables.length || !CHANGED.size;
+  const hidden = D.tables.length - POS.size;
+  document.getElementById('map-hint').textContent = state.scope === 'focus' && hidden
+    ? L(`변경된 테이블 ${CHANGED.size}개와, 이들이 참조하거나 변경의 영향을 받는 테이블 ${NEIGHBOR.size}개만 그렸습니다. ${hidden}개 생략.`,
+      `Showing ${plural(CHANGED.size, 'changed table')} and ${plural(NEIGHBOR.size, 'table')} they reference or that are affected. ${hidden} omitted.`)
+    : MAP_HINT;
+}
+
+/** 프레임 폭에 맞추는 배율. 1 보다 키우지 않고 MIN_ZOOM 아래로 줄이지 않는다. */
+function fitScale() {
+  const avail = document.getElementById('map-view').clientWidth - 48;
+  const floor = innerWidth < 700 && POS.size <= 8 ? 0.6 : MIN_ZOOM;
+  return state.mapW ? Math.max(floor, Math.min(1, avail / state.mapW)) : 1;
+}
+const zoomScale = () => state.zoom === 'fit' ? fitScale() : state.zoom;
+
+/** 지금 배율로 관계도 크기를 맞추고 배율 표시를 갱신한다. state.zoom 은 'fit' 이거나 숫자다. */
+function applyZoom(refit = false) {
+  const map = document.getElementById('map'), box = document.getElementById('map-scale');
+  const s = zoomScale();
+  map.style.transform = s !== 1 ? `scale(${s})` : '';
+  box.style.width = Math.ceil(state.mapW * s) + 'px';
+  box.style.height = Math.ceil(state.mapH * s) + 'px';
+  const pct = `${Math.round(s * 100)}%`;
+  document.querySelectorAll('.zoom-seg [data-zoom="fit"]').forEach(b => {
+    b.textContent = state.zoom === 'fit' ? L(`맞춤 ${pct}`, `Fit ${pct}`) : pct;
+    b.setAttribute('aria-pressed', String(state.zoom === 'fit'));
+  });
+  document.querySelectorAll('.zoom-seg [data-zoom="1"]').forEach(b => b.setAttribute('aria-pressed', String(state.zoom === 1)));
+  if (state.zoom === 'fit' && !refit && Math.abs(fitScale() - s) > 0.001) applyZoom(true);
+}
+
+/**
+ * 배율을 바꾸되 보기 창 안의 (cx, cy) 지점이 가리키는 관계도 위치를 그대로 둔다. cx·cy 를 안 주면 보기 창 가운데.
+ * @param next 'fit' 또는 배율 숫자(MIN_ZOOM~MAX_ZOOM 으로 자른다)
+ */
+function setZoom(next, cx, cy) {
+  const view = document.getElementById('map-view'), PAD = 24;
+  const s0 = zoomScale();
+  cx = cx ?? view.clientWidth / 2; cy = cy ?? view.clientHeight / 2;
+  const x = (view.scrollLeft + cx - PAD) / s0, y = (view.scrollTop + cy - PAD) / s0;
+  state.zoom = next === 'fit' ? 'fit' : Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+  applyZoom();
+  const s1 = zoomScale();
+  view.scrollLeft = x * s1 + PAD - cx;
+  view.scrollTop = y * s1 + PAD - cy;
+}
+/** 다음(dir 1)·이전(dir -1) 배율 단계. */
+const stepZoom = dir => {
+  const s = zoomScale();
+  return dir > 0 ? (ZOOM_STEPS.find(z => z > s + 0.001) ?? MAX_ZOOM) : ([...ZOOM_STEPS].reverse().find(z => z < s - 0.001) ?? MIN_ZOOM);
+};
+
+/** 꺾이는 점마다 반지름 r 로 둥글린 직각 경로. */
+function roundPath(pts, r = 6) {
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1);
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    if (rr < 0.5) { d += ` L${x1} ${y1}`; continue; }
+    const ax = x1 - (x1 - x0) / l1 * rr, ay = y1 - (y1 - y0) / l1 * rr;
+    const bx = x1 + (x2 - x1) / l2 * rr, by = y1 + (y2 - y1) / l2 * rr;
+    d += ` L${ax} ${ay} Q${x1} ${y1} ${bx} ${by}`;
+  }
+  const last = pts[pts.length - 1];
+  return d + ` L${last[0]} ${last[1]}`;
+}
+
+/** 열 r 을 가로지를 때 노드와 겹치지 않는 y 중 want 에 가장 가까운 값. */
+function freeY(r, want) {
+  const boxes = [...POS.entries()].filter(([n, p]) => p.rank === r && visibleIn(D.tables.find(t => t.name === n).status, state.mode))
+    .map(([, p]) => [p.y - 10, p.y + p.h + 10]).sort((a, b) => a[0] - b[0]);
+  if (!boxes.some(([a, b]) => want > a && want < b)) return want;
+  const cands = [boxes[0][0]];
+  boxes.forEach(([, b], i) => cands.push(i + 1 < boxes.length ? (b + boxes[i + 1][0]) / 2 : b));
+  return cands.reduce((best, y) => Math.abs(y - want) < Math.abs(best - want) ? y : best);
+}
+
+/**
+ * FK 마다 참조하는 컬럼 행에서 참조되는 컬럼 행까지 직각 선을 긋는다.
+ * 세로 구간은 열 사이 틈에 두고, 선마다 다른 레인을 쓴다.
+ */
+function drawEdges(w, h) {
+  const svg = document.getElementById('edges');
+  svg.setAttribute('width', w); svg.setAttribute('height', h); svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const lanes = new Map();
+  const laneX = gapRank => {
+    const n = lanes.get(gapRank) || 0; lanes.set(gapRank, n + 1);
+    return gapRank * (NODE_W + RANK_GAP) + NODE_W + 12 + (n % 6) * 8;
+  };
+  const rowY = (tName, col) => {
+    const t = D.tables.find(x => x.name === tName), p = POS.get(tName);
+    const i = rowsOf(t, state.mode).rows
+      .findIndex(c => (c.after?.name === col || c.before?.name === col || c.name === col));
+    return p.y + HEAD_H + (i < 0 ? -HEAD_H / 2 : i * ROW_H + ROW_H / 2) + 1;
+  };
+  /** 컬럼 묶음이 그려진 줄들의 y. 접혀 안 보이는 컬럼은 뺀다. 하나도 안 보이면 머리글 높이 하나. */
+  const rowYs = (tName, cols) => {
+    const ys = (cols || []).map(c => rowY(tName, c)), head = POS.get(tName).y + HEAD_H / 2 + 1;
+    const shown = ys.filter(y => y !== head);
+    return shown.length ? shown : [head];
+  };
+  const mid = ys => (Math.min(...ys) + Math.max(...ys)) / 2;
+  /** 컬럼이 여럿이면 노드 가장자리에 세로 괄호를 그린다. dir 은 선이 나가는 쪽(1 오른쪽, -1 왼쪽). */
+  const bracket = (x, ys, dir, cls, hotCls) => ys.length < 2 ? ''
+    : `<path class="e-bk ${cls.slice(2)}" d="M${x} ${Math.min(...ys)} h${dir * 5} V${Math.max(...ys)} h${-dir * 5}"${hotCls}/>`;
+  let out = '', labels = '';
+  const linked = new Set();
+  for (const t of D.tables) {
+    if (!POS.has(t.name) || !visibleIn(t.status, state.mode)) continue;
+    for (const k of fks(t)) {
+      const ref = refTable(k.ref_table);
+      if (!ref || !POS.has(ref.name) || !edgeInScope(t.name, ref.name)) continue;
+      if (!visibleIn(k.status, state.mode) || !visibleIn(ref.status, state.mode)) continue;
+      const s = POS.get(t.name), d = POS.get(ref.name);
+      const cls = `e e-${state.mode === 'merged' ? k.status : 'same'}`;
+      const ys0 = rowYs(t.name, k.columns), ys1 = rowYs(ref.name, k.ref_columns);
+      const y0 = mid(ys0), y1 = mid(ys1);
+      let pts;
+      if (ref.name === t.name) {
+        const x = s.x + NODE_W, lx = x + RANK_GAP - 12;
+        pts = [[x, y0], [lx, y0], [lx, y1], [x, y1]];
+      } else if (d.rank < s.rank) {
+        pts = [[s.x, y0]];
+        let y = y0;
+        for (let r = s.rank - 1; r > d.rank; r--) {
+          const lx = laneX(r), ny = freeY(r, (y + y1) / 2);
+          pts.push([lx, y], [lx, ny]);
+          y = ny;
+        }
+        const lx = laneX(d.rank);
+        pts.push([lx, y], [lx, y1], [d.x + NODE_W, y1]);
+      } else if (d.rank > s.rank) {
+        pts = [[s.x + NODE_W, y0]];
+        let y = y0;
+        for (let r = s.rank + 1; r < d.rank; r++) {
+          const lx = laneX(r - 1), ny = freeY(r, (y + y1) / 2);
+          pts.push([lx, y], [lx, ny]);
+          y = ny;
+        }
+        const lx = laneX(d.rank - 1);
+        pts.push([lx, y], [lx, y1], [d.x, y1]);
+      } else {
+        const lx = laneX(s.rank);
+        pts = [[s.x + NODE_W, y0], [lx, y0], [lx, y1], [d.x + NODE_W, y1]];
+      }
+      const hotCls = ` data-a="${esc(t.name)}" data-b="${esc(ref.name)}"`;
+      out += `<path class="${cls}" d="${roundPath(pts)}"${hotCls}/>`;
+      const [ex, ey] = pts[pts.length - 1], [sx, sy] = pts[0];
+      const dir = Math.sign(pts[pts.length - 2][0] - ex) || 1;
+      out += `<circle class="e-dot ${cls.slice(2)}" cx="${sx}" cy="${sy}" r="3"${hotCls}/>`;
+      out += `<path class="e-end ${cls.slice(2)}" d="M${ex} ${ey} l${dir * 6} -4 v8 z"${hotCls}/>`;
+      const opt = /ON DELETE (CASCADE|RESTRICT|NO ACTION|SET NULL|SET DEFAULT)/.exec(k.definition);
+      const sdir = Math.sign(pts[1][0] - sx) || 1;
+      out += bracket(sx, ys0, sdir, cls, hotCls) + bracket(ex, ys1, dir, cls, hotCls);
+      const multi = k.columns.length > 1 ? `(${k.columns.join(', ')}) → ${ref.name} (${(k.ref_columns || []).join(', ')})` : '';
+      if (opt || multi) labels += `<text class="e-label" x="${sx + sdir * 8}" y="${sy - 6}" text-anchor="${sdir > 0 ? 'start' : 'end'}"${hotCls}><title>${esc([multi, opt && `ON DELETE ${opt[1]}`].filter(Boolean).join('\n'))}</title>${esc([multi && `(${k.columns.join(', ')})`, opt?.[1]].filter(Boolean).join(' '))}</text>`;
+      linked.add(t.name); linked.add(ref.name);
+    }
+  }
+  svg.innerHTML = out;
+  const lab = document.getElementById('edge-labels');
+  lab.setAttribute('width', w); lab.setAttribute('height', h); lab.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  lab.innerHTML = labels;
+  findTable(document.getElementById('map-find').value);
+  document.querySelectorAll('.node.neighbor').forEach(n => n.classList.toggle('lonely', !linked.has(n.dataset.table)));
+}
+
+function hot(name, on) {
+  document.getElementById('map').classList.toggle('hovering', on);
+  document.querySelectorAll('#edges [data-a], #edge-labels [data-a]').forEach(e => {
+    if (e.dataset.a === name || e.dataset.b === name) e.classList.toggle('hot', on);
+  });
+  document.querySelectorAll('.node').forEach(n => {
+    if (n.dataset.table === name) n.classList.toggle('hot', on);
+  });
+}
+
+/**
+ * 이름에 q 가 든 테이블만 또렷하게 두고 나머지 테이블과 선을 흐린다. 옛 이름도 찾는다.
+ * @param go 참이면 첫 결과로 보기 창을 옮긴다
+ */
+function findTable(q, go = false) {
+  q = String(q || '').trim().toLowerCase();
+  const map = document.getElementById('map');
+  const match = n => { const t = D.tables.find(x => x.name === n.dataset.table); return [t?.name, t?.before_name].some(x => x && x.toLowerCase().includes(q)); };
+  const hits = q ? [...map.querySelectorAll('.node')].filter(n => getComputedStyle(n).display !== 'none' && match(n)) : [];
+  const names = new Set(hits.map(n => n.dataset.table));
+  map.classList.toggle('finding', hits.length > 0);
+  map.querySelectorAll('.node').forEach(n => n.classList.toggle('found', names.has(n.dataset.table)));
+  map.querySelectorAll('[data-a]').forEach(e => e.classList.toggle('found', names.has(e.dataset.a) || names.has(e.dataset.b)));
+  const outside = q && state.scope === 'focus' ? D.tables.filter(t => !POS.has(t.name) && [t.name, t.before_name].some(x => x && x.toLowerCase().includes(q))).length : 0;
+  document.getElementById('map-find-n').textContent = !q ? '' : outside ? L(`${hits.length}개 · 범위 밖 ${outside}개`, `${hits.length} · ${outside} outside scope`) : L(`${hits.length}개`, String(hits.length));
+  if (go && !hits.length && outside) { setScope('all'); return findTable(q, true); }
+  if (go && hits[0]) focusNode(hits[0].dataset.table);
+}
+
+function renderLegend() {
+  document.getElementById('legend').innerHTML = [
+    `<span><b class="sw n-add">+</b>${L('추가', 'Added')}</span>`, `<span><b class="sw n-del">−</b>${L('삭제', 'Dropped')}</span>`,
+    `<span><b class="sw n-chg">Δ</b>${L('변경', 'Changed')}</span>`, `<span><b class="sw n-chg">↻</b>${D.mode === 'replay' ? L('이름 변경', 'Renamed') : L('이름 변경 의심', 'Possible rename')}</span>`,
+    `<span>${ICON.key}PK</span>`, `<span>${ICON.link}FK</span>`, `<span>${ICON.nn}NOT NULL</span>`, `<span>${ICON.nul}${NULLABLE}</span>`,
+    D.tables.some(t => fks(t).some(k => /ON DELETE/.test(k.definition))) ? `<span><b class="sw">CASCADE</b>${L('선 끝 글자는 참조 행 삭제 시 동작(ON DELETE)', 'Text at the line end is the action when a referenced row is deleted (ON DELETE)')}</span>` : '',
+    state.scope === 'focus' && NEIGHBOR.size ? `<span><i class="sw-nb" aria-hidden="true"></i>${L('변경 없음 · 연결 컬럼만 표시', 'Unchanged · linked columns only')}</span>` : '',
+  ].join('');
+}
+
+/* ---------- 테이블별 diff ---------- */
+
+const pair = (b, a) => `<del class="w">${esc(b)}</del><span class="to">→</span><ins class="w">${esc(a)}</ins>`;
+
+function keyChips(t, r) {
+  const names = [r.name, r.before?.name];
+  return t.constraints.filter(k => names.some(n => (k.columns || []).includes(n)) && (k.kind === 'p' || k.kind === 'f' || (k.kind === 'u' && k.columns.length === 1)))
+    .map(k => {
+      const cls = isWhole(t) ? '' : k.status === 'added' ? ' k-added' : k.status === 'dropped' ? ' k-dropped' : '';
+      const body = k.kind === 'p' ? `${ICON.key}PK` : k.kind === 'u' ? 'UQ' : `${ICON.link}${esc(k.ref_table)}.${esc((k.ref_columns || []).join(','))}`;
+      return `<span class="key${cls}" title="${esc(k.definition)}">${body}</span>`;
+    }).join('');
+}
+
+/** 줄 클래스. 테이블째 지워지는 줄은 in-dropped(취소선)로, 컬럼 단위 삭제(dropped)와 구분한다. */
+const rowClass = (t, st) => t.status === 'dropped' ? 'in-dropped' : st;
+const rowSign = (t, st) => t.status === 'dropped' ? '' : SIGN[st];
+
+/** 컬럼 한 줄과, 필요하면 바뀐 속성을 적은 둘째 줄. */
+function columnLine(t, r) {
+  const st = isWhole(t) ? t.status : r.status;
+  const v = r.after || r.before;
+  let name = esc(v.name);
+  if (r.status === 'renamed') name = pair(r.before.name, r.name) + (confirmed(r) ? '' : ` <span class="flag" title="${esc(RENAME_HINT)}">${L('이름 변경 의심', 'Possible rename')}</span>`);
+  const nn = c => c.nullable ? '' : '<span class="nn" title="NOT NULL">NN</span>';
+  let type = r.changes.includes('type') ? pair(shortType(r.before.type), shortType(r.after.type)) : esc(shortType(v.type));
+  if (!r.changes.includes('nullable')) type += nn(v);
+
+  const subs = [];
+  const dft = x => x == null ? NONE : shortDefault(x);
+  if (r.changes.includes('nullable')) subs.push(`${NULLABLE} ${pair(r.before.nullable ? 'NULL' : 'NOT NULL', r.after.nullable ? 'NULL' : 'NOT NULL')}`);
+  if (r.changes.includes('default')) subs.push(`${L('기본값', 'Default')} ${pair(dft(r.before.default), dft(r.after.default))}`);
+  if (r.changes.includes('comment')) subs.push(`${L('코멘트', 'Comment')} ${pair(r.before.comment ?? NONE, r.after.comment ?? NONE)}`);
+  const IDENTITY = { a: 'ALWAYS', d: 'BY DEFAULT', auto_increment: 'AUTO_INCREMENT' };
+  if (r.changes.includes('identity')) subs.push(`identity ${pair(IDENTITY[r.before.identity] ?? NONE, IDENTITY[r.after.identity] ?? NONE)}`);
+  const gen = g => !g ? L('아님', 'no') : g === 's' ? 'STORED' : String(g).toUpperCase();
+  if (r.changes.includes('generated')) subs.push(`${L('생성 컬럼', 'Generated')} ${pair(gen(r.before.generated), gen(r.after.generated))}`);
+  if (r.changes.includes('collation')) subs.push(`COLLATE ${pair(r.before.collation ?? L('기본', 'default'), r.after.collation ?? L('기본', 'default'))}`);
+  if (st === 'added' || st === 'dropped') {
+    if (v.identity) subs.push(`identity ${esc(IDENTITY[v.identity] ?? v.identity)}`);
+    if (v.generated) subs.push(`${L('생성 컬럼', 'Generated')} ${esc(gen(v.generated))}`);
+    if (v.default != null && shortDefault(v.default) !== 'auto') subs.push(`${L('기본값', 'Default')} ${esc(shortDefault(v.default))}`);
+    if (v.comment) subs.push(`${L('코멘트', 'Comment')} “${esc(v.comment)}”`);
+  }
+  if (r.status === 'renamed' && !confirmed(r)) subs.push(esc(RENAME_HINT));
+  if (r.recreated) subs.push(`<span class="flag">${esc(RECREATE_HINT)}</span>`);
+  const id = rowKey(t.name, r.name);
+  const cls = rowClass(t, st), title = isWhole(t) ? '' : rowTitle(st, r);
+  return `<div class="ln ${cls}" id="${id}"><div class="g"${title ? ` title="${title}"` : ''}>${rowSign(t, st)}${title ? `<span class="sr-only">${title}</span>` : ''}</div><div class="nm">${name}${keyChips(t, r)}</div><div class="ty">${type}</div></div>`
+    + (subs.length ? `<div class="ln ${cls}"><div class="g"></div><div class="sub">${subs.join(' · ')}</div></div>` : '');
+}
+
+/** 변경 없는 컬럼이 4개 이상 이어지면 접어 둔다. */
+function columnLines(t) {
+  const lines = [];
+  let run = [];
+  const flush = () => {
+    if (run.length >= 4) {
+      const id = 'fold-' + Math.random().toString(36).slice(2);
+      lines.push(`<div class="ln fold" data-fold="${id}"><div class="g">⋯</div><div class="span"><button data-fold="${id}">${L(`변경 없는 컬럼 ${run.length}개 보기`, `Show ${plural(run.length, 'unchanged column')}`)} · ${esc(run.map(r => r.name).join(', '))}</button></div></div>`);
+      lines.push(`<template id="${id}">${run.map(r => columnLine(t, r)).join('')}</template>`);
+    } else run.forEach(r => lines.push(columnLine(t, r)));
+    run = [];
+  };
+  for (const r of t.columns) {
+    if (!isWhole(t) && r.status === 'same') { run.push(r); continue; }
+    flush();
+    lines.push(columnLine(t, r));
+  }
+  flush();
+  return lines.join('');
+}
+
+function structLines(t) {
+  const items = [
+    ...t.constraints.filter(k => k.kind === 'c' || (k.kind === 'u' && k.columns.length > 1) || k.status !== 'same')
+      .map(k => ({ st: k.status, kind: { p: 'PK', f: 'FK', u: 'UNIQUE', c: 'CHECK' }[k.kind] || k.kind, text: constraintText(k), name: k.name })),
+    ...t.indexes.map(i => ({ st: i.status, kind: i.unique ? 'UNIQUE IDX' : 'INDEX', text: indexText(i), name: i.name })),
+  ];
+  if (!items.length) return '';
+  return `<div class="ln sep"><div class="g"></div><div class="span">${L('제약 · 인덱스', 'Constraints & indexes')}</div></div>` + items.map(x => {
+    const st = isWhole(t) ? t.status : x.st, title = isWhole(t) ? '' : KEY_TITLE[st];
+    return `<div class="ln ${rowClass(t, st)}"><div class="g"${title ? ` title="${title}"` : ''}>${rowSign(t, st)}${title ? `<span class="sr-only">${title}</span>` : ''}</div><div class="nm kline"><span class="kind">${esc(x.kind)}</span><span class="ktext">${esc(x.text)}</span><span class="oname">${esc(x.name)}</span></div></div>`;
+  }).join('');
+}
+
+/** GitHub diffstat 처럼 5칸을 추가·삭제·변경 비율로 칠한다. 0이 아닌 항목은 최소 1칸. */
+function boxes(s) {
+  const vals = [s.add, s.del, s.chg], total = vals.reduce((a, b) => a + b, 0);
+  const cells = vals.map(v => v ? Math.max(1, Math.round(v / (total || 1) * 5)) : 0);
+  while (cells.reduce((a, b) => a + b, 0) > 5) cells[cells.indexOf(Math.max(...cells))]--;
+  const [a, d, c] = cells, g = 5 - a - d - c;
+  return `<span class="boxes" aria-hidden="true">${'<i class="a"></i>'.repeat(a)}${'<i class="d"></i>'.repeat(d)}${'<i class="c"></i>'.repeat(c)}${'<i></i>'.repeat(g)}</span>`;
+}
+
+function renderBlocks() {
+  const changed = D.tables.filter(t => t.status !== 'same');
+  const same = D.tables.length - changed.length;
+  document.getElementById('diff-hint').textContent = L(`${changed.length}개 테이블${same ? ` · 변경 없는 테이블 ${same}개는 생략` : ''}`,
+    `${plural(changed.length, 'table')}${same ? ` · ${plural(same, 'unchanged table')} not shown` : ''}`);
+  const view = document.getElementById('blocks').dataset.view || 'struct';
+  const blocks = changed.map(t => {
+    const s = tableStat(t);
+    const comment = t.comment.after ?? t.comment.before;
+    const cmtChg = !isWhole(t) && t.comment.before !== t.comment.after;
+    const ddl = ddlView(t);
+    const extra = t.constraints.length + t.indexes.length;
+    const note = t.status === 'dropped'
+      ? L(`<div class="whole-note dropped"><b>테이블 전체를 지웁니다.</b> 아래 컬럼 ${t.columns.length}개${extra ? '와 제약·인덱스' : ''}, 그리고 테이블의 데이터가 함께 사라집니다.</div>`,
+        `<div class="whole-note dropped"><b>The whole table is dropped.</b> The ${plural(t.columns.length, 'column')} below${extra ? ', its constraints and indexes,' : ''} and the table's data are all lost.</div>`)
+      : t.status === 'added' ? L(`<div class="whole-note added"><b>새로 만드는 테이블입니다.</b> 아래는 컬럼 ${t.columns.length}개의 전체 정의입니다.</div>`,
+        `<div class="whole-note added"><b>This is a new table.</b> Below is the full definition of its ${plural(t.columns.length, 'column')}.</div>`)
+      : t.recreated ? L(`<div class="whole-note dropped"><b>테이블을 지우고 같은 이름으로 다시 만듭니다.</b> 기존 행은 모두 사라집니다. 아래 줄은 옛 정의와 새 정의의 차이입니다.</div>`,
+        `<div class="whole-note dropped"><b>The table is dropped and recreated under the same name.</b> All existing rows are lost. The lines below show the difference between the old and new definitions.</div>`) : '';
+    const labelCls = t.recreated && !isWhole(t) ? 'label-dropped whole' : `label-${t.status}${isWhole(t) ? ' whole' : ''}`;
+    return `<div class="blk open${t.status === 'dropped' || t.recreated ? ' whole-dropped' : ''}" id="${tableKey(t.name)}" data-table="${esc(t.name)}" data-view="${ddl ? view : 'struct'}">
+      <button class="blk-head" aria-expanded="true" aria-controls="body-${tableKey(t.name)}">
+        ${ICON.chevron}<span class="label ${labelCls}">${tableLabel(t)}</span>
+        ${t.status === 'renamed' ? `<span class="old-name">${esc(t.before_name)} →</span>` : ''}<span class="tn">${esc(t.name)}</span>
+        ${comment ? `<span class="tc">${cmtChg ? pair(t.comment.before ?? NONE, t.comment.after ?? NONE) : esc(comment)}</span>` : ''}
+        <span class="stat-r">${isWhole(t) ? `<span class="whole-cnt">${wholeCount(t)}</span>` : counts(s.add, s.del, s.chg, '') + boxes(s)}</span>
+      </button>
+      <div class="blk-body" id="body-${tableKey(t.name)}">${note}
+        <div class="blk-tools">${ddl ? `<div class="seg seg-s" role="group" aria-label="${esc(t.name)} ${L('보기 방식', 'view mode')}">
+          <button data-bview="struct" aria-pressed="${view !== 'ddl'}">${L('구조', 'Structure')}</button><button data-bview="ddl" aria-pressed="${view === 'ddl'}">${L('전체 SQL', 'Full SQL')}</button></div>` : ''}
+          <button class="map-link" data-map="${esc(t.name)}">${L('관계도에서 보기', 'Show in diagram')}</button></div>
+        <div class="dl">${columnLines(t)}${structLines(t)}</div>${ddl}</div>
+    </div>`;
+  });
+  const views = D.views.filter(v => v.status !== 'same').map(v => `<div class="blk open" id="${tableKey(v.name)}" data-table="${esc(v.name)}">
+      <button class="blk-head" aria-expanded="true" aria-controls="body-${tableKey(v.name)}">${ICON.chevron}<span class="label label-${v.status}">${viewLabel(v.status)}</span><span class="tn">${esc(v.name)}</span></button>
+      <div class="blk-body" id="body-${tableKey(v.name)}">${viewDdl(v)}</div></div>`);
+  const box = document.getElementById('blocks');
+  box.innerHTML = blocks.join('') + views.join('') || `<div class="none">${L('변경된 테이블이 없습니다.', 'No changed tables.')}</div>`;
+  box.querySelectorAll('.blk-head').forEach(b => b.addEventListener('click', () => setOpen(b.parentElement, !b.parentElement.classList.contains('open'))));
+  box.querySelectorAll('button[data-fold]').forEach(b => b.addEventListener('click', () => focusEl(unfold(b.dataset.fold))));
+  box.querySelectorAll('.map-link[data-map]').forEach(b => b.addEventListener('click', () => focusNode(b.dataset.map)));
+  box.querySelectorAll('[data-bview]').forEach(b => b.addEventListener('click', () => setBlkView(b.closest('.blk'), b.dataset.bview)));
+  box.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    const ok = await copyText(b.dataset.copy);
+    b.textContent = ok ? L('복사했습니다', 'Copied') : L('복사하지 못했습니다', 'Copy failed');
+    setTimeout(() => { b.textContent = L('DDL 복사', 'Copy DDL'); }, 2000);
+  }));
+  renderToc(changed, D.views.filter(v => v.status !== 'same'));
+}
+
+/** diff 블록 왼쪽의 테이블 목록. 이름(변경 전 이름 포함)으로 거를 수 있다. */
+function renderToc(tables, views) {
+  const items = [
+    ...tables.map(t => { const s = tableStat(t); return { name: t.name, alias: t.before_name, status: t.status, label: tableLabel(t),
+      c: isWhole(t) ? `<span class="zero">${L(`컬럼 ${t.columns.length}`, plural(t.columns.length, 'column'))}</span>` : counts(s.add, s.del, s.chg, ''),
+      say: isWhole(t) ? `, ${wholeCount(t)}` : L(`, 추가 ${s.add} 삭제 ${s.del} 변경 ${s.chg}`, `, ${s.add} added, ${s.del} dropped, ${s.chg} changed`) }; }),
+    ...views.map(v => ({ name: v.name, status: v.status, label: viewLabel(v.status), c: `<span class="zero">${L('뷰', 'View')}</span>`, say: '' })),
+  ];
+  document.getElementById('toc').hidden = !items.length;
+  document.querySelector('.diff-layout').classList.toggle('no-toc', !items.length);
+  const ul = document.getElementById('toc-list');
+  ul.innerHTML = items.map(x => `<li data-q="${esc([x.name, x.alias].filter(Boolean).join(' ').toLowerCase())}">
+      <a href="#${tableKey(x.name)}" data-table="${esc(x.name)}" title="${esc(`${x.label} · ${x.alias ? x.alias + ' → ' : ''}${x.name}`)}"
+        aria-label="${esc(`${x.label}: ${x.name}${x.alias ? L(` (이전 이름 ${x.alias})`, ` (formerly ${x.alias})`) : ''}${x.say}`)}">
+      <span class="s s-${x.status}" aria-hidden="true">${SIGN[x.status]}</span><span class="n" aria-hidden="true">${esc(x.name)}</span><span class="c" aria-hidden="true">${x.c}</span></a></li>`).join('')
+    + `<li class="empty" hidden>${L('일치하는 테이블이 없습니다.', 'No matching tables.')}</li>`;
+  ul.querySelectorAll('a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); focusRow(a.dataset.table); }));
+}
+
+function filterToc(q) {
+  q = q.trim().toLowerCase();
+  let n = 0;
+  document.querySelectorAll('#toc-list li[data-q]').forEach(li => { li.hidden = !li.dataset.q.includes(q); if (!li.hidden) n++; });
+  document.querySelector('#toc-list .empty').hidden = n > 0;
+}
+
+/**
+ * 지금 보고 있는 diff 블록을 목록에서 표시하고, 목록 안에서 보이게 스크롤한다.
+ * 목록이나 위험 항목으로 이동한 블록은 화면에 들어왔다가 벗어날 때까지 표시를 유지한다.
+ */
+function trackActive() {
+  if (document.getElementById('toc').hidden) return;
+  const blks = [...document.querySelectorAll('#blocks .blk')];
+  const atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+  let cur = null;
+  for (const b of blks) {
+    const top = b.getBoundingClientRect().top;
+    if (top <= 80 || (atEnd && top < innerHeight)) cur = b; else break;
+  }
+  let name = cur && cur.getBoundingClientRect().bottom > 0 ? cur.dataset.table : null;
+  const pin = state.pinned && document.getElementById(tableKey(state.pinned));
+  if (pin) {
+    const r = pin.getBoundingClientRect();
+    if (r.top < innerHeight && r.bottom > 0) { state.pinSeen = true; name = state.pinned; }
+    else if (state.pinSeen) state.pinned = null;
+    else name = state.pinned;
+  }
+  const ul = document.getElementById('toc-list');
+  ul.querySelectorAll('a').forEach(a => {
+    if (a.dataset.table !== name) { a.removeAttribute('aria-current'); return; }
+    if (a.getAttribute('aria-current') === 'location') return;
+    a.setAttribute('aria-current', 'location');
+    if (a.offsetTop < ul.scrollTop) ul.scrollTop = a.offsetTop;
+    else if (a.offsetTop + a.offsetHeight > ul.scrollTop + ul.clientHeight) ul.scrollTop = a.offsetTop + a.offsetHeight - ul.clientHeight;
+  });
+}
+
+/** 테이블의 전체 CREATE 문. 변경 전·후를 줄 단위로 비교해 바뀐 줄만 색을 입히고 나머지 줄도 접지 않고 보여 준다. DDL 이 없는 스냅샷이면 빈 문자열. */
+function ddlView(t) {
+  if (!t.ddl || (t.ddl.before == null && t.ddl.after == null)) return '';
+  const text = t.ddl.after ?? t.ddl.before;
+  const what = t.ddl.before != null && t.ddl.after != null ? L('전체 정의(변경 전·후 합쳐 보기) · 빨강은 변경 전 줄, 초록은 변경 후 줄, 나머지는 그대로', 'Full definition (before and after merged) · red lines are before, green lines are after, the rest are unchanged')
+    : t.ddl.after != null ? L('새 테이블의 전체 정의', 'Full definition of the new table') : L('지우는 테이블의 전체 정의(테이블째 사라짐)', 'Full definition of the dropped table (lost with the table)');
+  const dropped = t.ddl.after == null;
+  return `<div class="ddlv${dropped ? ' whole-dropped' : ''}"><div class="ddl-bar"><span>${what}</span>
+    <button class="map-link" data-copy="${esc(text)}">${L('DDL 복사', 'Copy DDL')}</button></div>${sqlDiffHtml(sqlLineDiff(t.ddl.before, t.ddl.after), { context: Infinity, single: dropped })}</div>`;
+}
+
+/** 뷰 정의의 줄 단위 비교. 스냅샷에 DDL 이 있으면 CREATE VIEW 문, 없으면 정의 본문끼리 비교한다. */
+function viewDdl(v) {
+  const [b, a] = v.ddl ? [v.ddl.before, v.ddl.after] : [v.before, v.after];
+  return `<div class="ddl-bar"><span>${b != null && a != null ? L('변경 전 → 변경 후', 'Before → After') : a != null ? L('새 정의', 'New definition') : L('삭제된 정의', 'Dropped definition')}</span>
+    <button class="map-link" data-copy="${esc(a ?? b ?? '')}">${L('DDL 복사', 'Copy DDL')}</button></div>${sqlDiffHtml(sqlLineDiff(b, a), { context: 50 })}`;
+}
+
+/** 모든 블록 본문을 구조 diff 또는 전체 SQL 로 보여 준다. remember 가 false 면 선택을 저장하지 않는다. */
+function setView(v, remember = true) {
+  document.getElementById('blocks').dataset.view = v;
+  document.querySelectorAll('#blocks .blk').forEach(blk => { if (blk.querySelector('[data-bview]')) setBlkView(blk, v, false); });
+  syncViewSeg();
+  if (remember) try { localStorage.setItem('schema-review-view', v); } catch (e) {}
+}
+
+/** 블록 하나만 구조 diff 또는 전체 SQL 로 바꾼다. */
+function setBlkView(blk, v, sync = true) {
+  blk.dataset.view = v;
+  blk.querySelectorAll('[data-bview]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.bview === v)));
+  if (sync) syncViewSeg();
+}
+
+/** 전체 전환 버튼을 블록 상태에 맞춘다. 블록마다 다르면 두 버튼 모두 눌리지 않은 상태가 된다. */
+function syncViewSeg() {
+  const views = new Set([...document.querySelectorAll('#blocks .blk')].filter(b => b.querySelector('[data-bview]')).map(b => b.dataset.view));
+  const one = views.size === 1 ? [...views][0] : null;
+  document.querySelectorAll('#view-seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === one)));
+}
+
+function setOpen(blk, open) {
+  blk.classList.toggle('open', open);
+  blk.querySelector('.blk-head').setAttribute('aria-expanded', String(open));
+}
+
+/** 접어 둔 컬럼 줄을 펼치고 첫 줄을 돌려준다. */
+function unfold(id) {
+  const tpl = document.getElementById(id);
+  const row = document.querySelector(`.ln.fold[data-fold="${id}"]`);
+  if (!tpl || !row) return null;
+  const frag = tpl.content.cloneNode(true);
+  const first = frag.querySelector('.ln');
+  row.replaceWith(frag);
+  tpl.remove();
+  return first;
+}
+
+/* ---------- 이동 ---------- */
+
+function flash(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+/** 화면 읽기 프로그램과 키보드 사용자를 위해 포커스를 옮긴다. */
+function focusEl(el) {
+  if (el && getComputedStyle(el).display === 'contents') el = el.querySelector('.nm') || el.firstElementChild;
+  if (!el) return;
+  if (!el.hasAttribute('tabindex') && !/^(BUTTON|A|INPUT)$/.test(el.tagName)) el.tabIndex = -1;
+  el.focus({ preventScroll: true });
+}
+
+/** diff 블록(과 컬럼 줄)로 이동한다. 접혀 있으면 펼친다. */
+function focusRow(table, col) {
+  const blk = document.getElementById(tableKey(table));
+  if (!blk) return;
+  setOpen(blk, true);
+  if (col && blk.dataset.view === 'ddl') setBlkView(blk, 'struct');
+  let row = col ? document.getElementById(rowKey(table, col)) : null;
+  if (col && !row) {
+    const fold = [...blk.querySelectorAll('template')].find(tp => tp.content.getElementById(rowKey(table, col)));
+    if (fold) { unfold(fold.id); row = document.getElementById(rowKey(table, col)); }
+  }
+  (row ? row.querySelector('.nm') || row.firstElementChild : blk).scrollIntoView({ block: row ? 'center' : 'start' });
+  flash(row || blk);
+  focusEl(row || blk.querySelector('.blk-head'));
+  state.pinned = table; state.pinSeen = false;
+  try { history.replaceState(null, '', '#' + tableKey(table)); } catch (e) {}
+  trackActive();
+}
+
+function focusNode(table) {
+  const node = document.querySelector(`.node[data-table="${CSS.escape(table)}"]`);
+  if (!node) { document.querySelector('.seg [data-mode="merged"]').click(); return focusNode(table); }
+  const view = document.getElementById('map-view'), s = zoomScale();
+  view.scrollLeft = (parseFloat(node.style.left) || 0) * s + 24 - view.clientWidth / 2 + (node.offsetWidth * s) / 2;
+  view.scrollTop = (parseFloat(node.style.top) || 0) * s + 24 - view.clientHeight / 2 + (node.offsetHeight * s) / 2;
+  document.getElementById('map-frame').scrollIntoView({ block: 'nearest' });
+  focusEl(node);
+  hot(table, true);
+  setTimeout(() => hot(table, false), 1800);
+}
+
+/* ---------- 내보내기 ---------- */
+
+const MODE_LABEL = { before: L('변경 전', 'Before'), merged: L('합쳐 보기', 'Merged'), after: L('변경 후', 'After') };
+
+/** 지금 관계도에 보이는 테이블을 스냅샷 모양으로 만든다. 합쳐 보기는 변경 후 기준이다. */
+function erTables() {
+  const mode = state.mode === 'before' ? 'before' : 'after', before = mode === 'before';
+  const tableBefore = new Map(D.tables.filter(t => t.before_name).map(t => [t.name, t.before_name]));
+  const hidden = new Set([...document.querySelectorAll('#map .node.lonely')].map(n => n.dataset.table));
+  return D.tables.filter(t => POS.has(t.name) && visibleIn(t.status, mode) && !hidden.has(t.name)).map(t => {
+    const ren = new Map(t.columns.filter(r => r.status === 'renamed').map(r => [r.name, r.before.name]));
+    const col = n => before ? (ren.get(n) || n) : n;
+    return {
+      name: before && t.before_name ? t.before_name : t.name,
+      comment: before ? t.comment.before : t.comment.after,
+      columns: t.columns.filter(r => visibleIn(r.status, mode)).map(r => side(r, mode)),
+      constraints: t.constraints.filter(k => visibleIn(k.status, mode)).map(k => k.status === 'dropped' ? k : ({
+        ...k, columns: (k.columns || []).map(col),
+        ref_table: before && tableBefore.has(k.ref_table) ? tableBefore.get(k.ref_table) : k.ref_table,
+      })),
+      indexes: t.indexes.filter(i => visibleIn(i.status, mode)).map(i => i.status === 'dropped' ? i : ({ ...i, columns: (i.columns || []).map(col) })),
+    };
+  });
+}
+
+/** 내보내기 제목. Mermaid 는 변경을 표시하지 못하므로 합쳐 보기도 변경 후로 적는다. */
+const exportTitle = (mermaid = false) => `${D.before.source} → ${D.after.source} · ${mermaid && state.mode === 'merged' ? MODE_LABEL.after : MODE_LABEL[state.mode]}${state.scope === 'focus' ? L(' · 변경 주변', ' · Changed only') : ''}`;
+const exportName = ext => `schema-${String(D.after.source || 'after').replace(/\.sql$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_')}-${state.mode}${state.scope === 'focus' ? '-focus' : ''}.${ext}`;
+const xmlText = s => esc(String(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, ' '));
+
+/** 화면의 관계도를 그대로 옮긴 독립 SVG. 색은 지금 테마의 값을 그대로 쓴다. */
+function mapSvg() {
+  const map = document.getElementById('map'), dim = ['finding', 'hovering'].filter(c => map.classList.contains(c));
+  map.classList.remove(...dim);
+  try { return mapSvgNow(); } finally { map.classList.add(...dim); }
+}
+
+function mapSvgNow() {
+  const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim();
+  const PAD = 24, TOP = 44, sans = v('--font'), uid = 's' + Math.random().toString(36).slice(2, 8);
+  const legendItems = [...document.querySelectorAll('#legend > span')].map(s => s.textContent.trim()).filter(Boolean);
+  const title = exportTitle();
+  const textW = s => [...s].reduce((w, ch) => w + (/[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/.test(ch) ? 13 : 7.5), 0);
+  const W = Math.ceil(Math.max(state.mapW + PAD * 2, Math.min(textW(title) * 1.1 + PAD * 2, 1200), 360));
+  const legendLines = [];
+  for (const item of legendItems) {
+    const last = legendLines[legendLines.length - 1];
+    if (last && textW(last + '   ' + item) * 0.95 < W - PAD * 2) legendLines[legendLines.length - 1] = last + '   ' + item;
+    else legendLines.push(item);
+  }
+  const H = state.mapH + TOP + PAD + 18 * legendLines.length + 10;
+  const attr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const out = [];
+  out.push(`<rect width="${W}" height="${H}" fill="${v('--bg-muted')}"/>`);
+  out.push(`<text x="${PAD}" y="28" font-family="${attr(sans)}" font-size="14" font-weight="600" fill="${v('--fg')}">${xmlText(title)}</text>`);
+  const keep = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity', 'font-family', 'font-size', 'font-weight', 'paint-order', 'stroke-linejoin'];
+  const copyShapes = svg => [...svg.children].map(el => {
+    const c = el.cloneNode(true), cs = getComputedStyle(el);
+    c.removeAttribute('class');
+    [...c.attributes].filter(a => a.name.startsWith('data-')).forEach(a => c.removeAttribute(a.name));
+    c.setAttribute('style', keep.map(p => `${p}:${cs.getPropertyValue(p)}`).join(';'));
+    return c.outerHTML;
+  }).join('');
+  out.push(`<g transform="translate(${PAD},${TOP})">${copyShapes(document.getElementById('edges'))}`);
+  const ICONS = { PK: ICON.key, FK: ICON.link, 'NOT NULL': ICON.nn, [NULLABLE]: ICON.nul };
+  let k = 0;
+  for (const el of document.querySelectorAll('#map .node')) {
+    if (getComputedStyle(el).display === 'none') continue;
+    const x = parseFloat(el.style.left), y = parseFloat(el.style.top), w = el.offsetWidth, h = el.offsetHeight, cs = getComputedStyle(el);
+    const id = `${uid}-${k++}`;
+    const g = [`<clipPath id="${id}"><rect width="${w}" height="${h}" rx="6"/></clipPath><g clip-path="url(#${id})">`,
+      `<rect width="${w}" height="${h}" fill="${cs.backgroundColor}"/>`];
+    const text = (node, tx, ty, anchor = 'start') => {
+      if (!node || !node.textContent.trim()) return '';
+      const s = getComputedStyle(node);
+      let t = node.textContent.trim();
+      if (node.scrollWidth > node.clientWidth + 1) t = t.slice(0, Math.max(1, Math.floor(t.length * node.clientWidth / node.scrollWidth) - 1)) + '…';
+      const deco = s.textDecorationLine.includes('line-through') ? ' text-decoration="line-through"' : '';
+      return `<text x="${tx}" y="${ty}" text-anchor="${anchor}" font-family="${attr(s.fontFamily)}" font-size="${s.fontSize}" font-weight="${s.fontWeight}" fill="${s.color}"${deco}>${xmlText(t)}</text>`;
+    };
+    const nh = el.querySelector('.nh');
+    g.push(`<rect width="${w}" height="${nh.offsetHeight}" fill="${getComputedStyle(nh).backgroundColor}"/>`);
+    g.push(`<line x1="0" y1="${nh.offsetHeight - 0.5}" x2="${w}" y2="${nh.offsetHeight - 0.5}" stroke="${getComputedStyle(nh).borderBottomColor}"/>`);
+    const hy = nh.offsetHeight / 2 + 4;
+    g.push(text(nh.querySelector('.gut'), 10, hy, 'middle'), text(nh.querySelector('.tn'), 20, hy), text(nh.querySelector('.tc'), w - 8, hy, 'end'));
+    for (const r of el.querySelectorAll('.nr')) {
+      const ry = r.offsetTop, rh = r.offsetHeight, rs = getComputedStyle(r), ty = ry + rh / 2 + 4;
+      if (rs.backgroundColor !== 'rgba(0, 0, 0, 0)') g.push(`<rect y="${ry}" width="${w}" height="${rh}" fill="${rs.backgroundColor}"/>`);
+      if (r.previousElementSibling?.classList.contains('nr')) g.push(`<line x1="0" y1="${ry}" x2="${w}" y2="${ry}" stroke="${rs.borderTopColor}"/>`);
+      const ic = r.querySelector('.ic');
+      if (ic && ICONS[ic.title]) g.push(ICONS[ic.title].replace('<svg ', `<svg x="${20 + 2}" y="${ry + (rh - 12) / 2}" color="${getComputedStyle(ic).color}" `));
+      g.push(text(r.querySelector('.gut'), 10, ty, 'middle'), text(r.querySelector('.cn'), 36, ty), text(r.querySelector('.ct'), w - 8, ty, 'end'));
+    }
+    g.push('</g>');
+    const dash = cs.borderTopStyle === 'dashed' ? ' stroke-dasharray="4 3"' : '';
+    g.push(`<rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" rx="6" fill="none" stroke="${cs.borderTopColor}"${dash}/>`);
+    out.push(`<g transform="translate(${x},${y})">${g.join('')}</g>`);
+  }
+  out.push(copyShapes(document.getElementById('edge-labels')), '</g>');
+  legendLines.forEach((line, i) => out.push(`<text x="${PAD}" y="${state.mapH + TOP + PAD + 14 + i * 18}" font-family="${attr(sans)}" font-size="12" fill="${v('--fg-muted')}">${xmlText(line)}</text>`));
+  return `<svg xmlns="${'http'}://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${out.join('')}</svg>`;
+}
+
+/** 너무 커서 PNG 로 만들 수 없을 때 던지는 오류. */
+class TooLargeError extends Error {}
+
+/** SVG 를 PNG Blob 으로 바꾼다. 브라우저 캔버스 한도(한 변 32767px, 넓이 약 2.68억 px) 안에서 최대 2배로 그린다. */
+function svgToPng(svg) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(2, 32767 / Math.max(img.width, img.height), Math.sqrt(2.68e8 / (img.width * img.height)));
+      if (scale < 0.5) {
+        URL.revokeObjectURL(url);
+        return reject(new TooLargeError(L(`관계도가 ${img.width}×${img.height}px 로 너무 커서 PNG 로 만들 수 없습니다. SVG 를 쓰세요`, `The diagram is ${img.width}×${img.height}px, too large for a PNG. Use SVG instead`)));
+      }
+      const c = Object.assign(document.createElement('canvas'), { width: Math.floor(img.width * scale), height: Math.floor(img.height * scale) });
+      const ctx = c.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? resolve(b) : reject(new Error(L('PNG 변환 실패', 'PNG conversion failed'))), 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(L('SVG 를 그리지 못했습니다', 'Could not render the SVG'))); };
+    img.src = url;
+  });
+}
+
+async function runExport(kind) {
+  const status = document.getElementById('copy-status');
+  let msg;
+  try {
+    if (kind === 'mermaid') msg = (await copyText(mermaidER(erTables(), { title: exportTitle(true) }))) ? L('Mermaid ERD 를 복사했습니다', 'Mermaid ERD copied') : L('복사하지 못했습니다', 'Copy failed');
+    if (kind === 'mmd') { saveFile(exportName('mmd'), mermaidER(erTables(), { title: exportTitle(true) })); msg = L('Mermaid 파일을 저장했습니다', 'Mermaid file saved'); }
+    if (kind === 'svg') { saveFile(exportName('svg'), mapSvg(), 'image/svg+xml'); msg = L('SVG 를 저장했습니다', 'SVG saved'); }
+    if (kind === 'png') { saveFile(exportName('png'), await svgToPng(mapSvg())); msg = L('PNG 를 저장했습니다', 'PNG saved'); }
+  } catch (e) {
+    msg = L(`내보내지 못했습니다: ${e.message}`, `Export failed: ${e.message}`);
+  }
+  status.textContent = '';
+  setTimeout(() => { status.textContent = msg; }, 50);
+  const menu = document.getElementById('export-menu');
+  menu.querySelector('.menu-status')?.remove();
+  menu.querySelector('.menu').insertAdjacentHTML('beforeend', `<p class="menu-status">${esc(msg)}</p>`);
+}
+document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => runExport(b.dataset.export)));
+document.addEventListener('keydown', e => {
+  const menu = document.getElementById('export-menu');
+  if (e.key === 'Escape' && menu.open) { menu.open = false; menu.querySelector('summary').focus(); }
+});
+document.addEventListener('click', e => {
+  const menu = document.getElementById('export-menu');
+  if (e.target.matches?.('a[data-export]')) return;
+  if (menu.open && !menu.contains(e.target)) menu.open = false;
+});
+
+/**
+ * 자동 점검(scripts/check_html.mjs)용: 보기 3개 × 범위 2개 각각의 내보내기 결과를 만든다.
+ * 끝나면 원래 보기·범위로 돌려놓는다.
+ * @return [{mode, scope, mermaid, svgError, clips, nodes, png}]
+ */
+async function exportSelfTest() {
+  const keep = [state.mode, state.scope], out = [];
+  const scopes = document.getElementById('scope-seg').hidden ? [state.scope] : ['focus', 'all'];
+  for (const scope of scopes) for (const mode of ['before', 'merged', 'after']) {
+    state.mode = mode; setScope(scope);
+    const svg = mapSvg();
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const err = doc.querySelector('parsererror');
+    const nodes = [...document.querySelectorAll('#map .node')].filter(n => getComputedStyle(n).display !== 'none').length;
+    let png;
+    try { png = (await svgToPng(svg)).size; } catch (e) { png = e instanceof TooLargeError ? 'too-large' : `error: ${e.message}`; }
+    out.push({ mode, scope, mermaid: mermaidER(erTables(), { title: exportTitle(true) }), svgError: err ? err.textContent.slice(0, 200) : null,
+      clips: doc.querySelectorAll('clipPath').length, nodes, png });
+  }
+  state.mode = keep[0]; setScope(keep[1]);
+  document.querySelectorAll('#mode-seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.mode === state.mode)));
+  return out;
+}
+
+/* ---------- 컨트롤 ---------- */
+
+document.querySelectorAll('#mode-seg button').forEach(b => b.addEventListener('click', () => {
+  state.mode = b.dataset.mode;
+  b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderMap();
+}));
+/** 관계도 범위를 바꾸고 다시 그린다. */
+function setScope(v) {
+  state.scope = v;
+  document.querySelectorAll('#scope-seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.scope === v)));
+  renderMap();
+}
+document.querySelectorAll('#scope-seg button').forEach(b => b.addEventListener('click', () => setScope(b.dataset.scope)));
+document.getElementById('map-find').addEventListener('input', e => findTable(e.target.value));
+document.getElementById('map-find').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); findTable(e.target.value, true); }
+  else if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.target.value = ''; findTable(''); }
+});
+document.querySelectorAll('.zoom-seg button').forEach(b => b.addEventListener('click', () => {
+  const z = b.dataset.zoom;
+  if (z === 'full') return toggleFullscreen();
+  setZoom(z === 'in' ? stepZoom(1) : z === 'out' ? stepZoom(-1) : z === 'fit' ? 'fit' : 1);
+}));
+
+/** 관계도 프레임을 전체 화면으로. 전체 화면에서는 맞춤 배율이 화면 폭을 따른다. */
+function toggleFullscreen() {
+  const frame = document.getElementById('map-frame');
+  if (document.fullscreenElement) document.exitFullscreen();
+  else frame.requestFullscreen?.().catch(() => {});
+}
+document.addEventListener('fullscreenchange', () => applyZoom());
+if (!document.fullscreenEnabled) document.getElementById('zoom-full').hidden = true;
+
+/* 보기 창: Ctrl·⌘+휠(트랙패드 오므리기 포함)로 커서 기준 확대·축소, 마우스로 끌어 이동, 키보드 + − 0 F */
+(() => {
+  const view = document.getElementById('map-view');
+  view.addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const r = view.getBoundingClientRect();
+    setZoom(zoomScale() * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  let drag = null, moved = false;
+  view.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('button, a, input')) return;
+    drag = { x: e.clientX, y: e.clientY, l: view.scrollLeft, t: view.scrollTop, id: e.pointerId };
+    moved = false;
+  });
+  view.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved) { moved = true; view.classList.add('dragging'); view.setPointerCapture(e.pointerId); }
+    view.scrollLeft = drag.l - dx; view.scrollTop = drag.t - dy;
+  });
+  const end = () => { if (drag) view.classList.remove('dragging'); drag = null; };
+  view.addEventListener('pointerup', end);
+  view.addEventListener('pointercancel', end);
+  /* 터치 두 손가락: 두 점 사이 거리 비율로 확대·축소. 한 손가락 이동은 브라우저 스크롤에 맡긴다. */
+  const touches = new Map();
+  let pinch = null;
+  const span = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  view.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2) pinch = { d: span().d || 1, z: zoomScale() };
+  });
+  view.addEventListener('pointermove', e => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!pinch || touches.size !== 2) return;
+    const g = span(), r = view.getBoundingClientRect();
+    setZoom(pinch.z * g.d / pinch.d, g.x - r.left, g.y - r.top);
+  });
+  const lift = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = null; };
+  view.addEventListener('pointerup', lift);
+  view.addEventListener('pointercancel', lift);
+  view.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  view.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key;
+    if (k === '+' || k === '=') setZoom(stepZoom(1));
+    else if (k === '-' || k === '_') setZoom(stepZoom(-1));
+    else if (k === '0') setZoom(1);
+    else if (k === 'f' || k === 'F') setZoom('fit');
+    else return;
+    e.preventDefault();
+  });
+})();
+let frameW = 0;
+new ResizeObserver(([e]) => {
+  if (Math.round(e.contentRect.width) === frameW) return;
+  frameW = Math.round(e.contentRect.width);
+  applyZoom();
+}).observe(document.getElementById('map-frame'));
+document.getElementById('toc-filter').addEventListener('input', e => filterToc(e.target.value));
+document.getElementById('checks-copy').addEventListener('click', async e => {
+  const ok = await copyText(document.getElementById('checks').textContent);
+  e.target.textContent = ok ? L('복사했습니다', 'Copied') : L('복사하지 못했습니다', 'Could not copy');
+  setTimeout(() => { e.target.textContent = L('모두 복사', 'Copy all'); }, 2000);
+});
+let tracking = false;
+addEventListener('scroll', () => {
+  if (tracking) return;
+  tracking = true;
+  requestAnimationFrame(() => { tracking = false; trackActive(); });
+}, { passive: true });
+document.querySelectorAll('.theme button').forEach(b => b.addEventListener('click', () => {
+  const v = b.dataset.theme;
+  if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = v;
+  b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  try { localStorage.setItem('schema-review-theme', v); } catch (e) {}
+}));
+/** 글자 크기(s·m·l)를 바꾼다. m 이 기본이다. */
+function setSize(v, remember = true) {
+  if (v === 'm') document.documentElement.removeAttribute('data-size'); else document.documentElement.dataset.size = v;
+  document.querySelectorAll('.seg.size button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.size === v)));
+  if (remember) try { localStorage.setItem('schema-ui-size', v); } catch (e) {}
+  if (typeof syncFrameTheme === 'function') syncFrameTheme();
+}
+document.querySelectorAll('.seg.size button').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)));
+try {
+  const size = D.embed ? null : localStorage.getItem('schema-ui-size');
+  if (size) setSize(size, false);
+} catch (e) {}
+try {
+  const saved = D.embed ? null : localStorage.getItem('schema-review-theme');
+  if (saved) document.querySelector(`.theme [data-theme="${saved}"]`)?.click();
+} catch (e) {}
+document.getElementById('expand-all').addEventListener('click', () => document.querySelectorAll('.blk').forEach(b => setOpen(b, true)));
+document.getElementById('collapse-all').addEventListener('click', () => document.querySelectorAll('.blk').forEach(b => setOpen(b, false)));
+document.getElementById('note').textContent = [
+  `${D.before.source} → ${D.after.source}${D.generated_at ? L(` · ${D.generated_at} 생성`, ` · generated ${D.generated_at}`) : ''}.`,
+  D.mode === 'replay'
+    ? L('이력을 같은 DB 에 순서대로 적용했으므로, 같은 객체(oid·attnum)의 이름이 바뀐 것을 이름 변경으로 확정했습니다.',
+      'The history was applied to one database in order, so a name change on the same object (oid, attnum) is confirmed as a rename.')
+    : L('이름 변경은 DDL 두 개만으로는 확정할 수 없어 "의심"으로만 표시합니다. 마이그레이션 이력을 순서대로 재생하면 확정할 수 있습니다.',
+      'Renames cannot be confirmed from two DDL files alone, so they are only marked "possible rename". Replaying the migration history in order can confirm them.'),
+].join(' ');
+if (D.embed) document.body.classList.add('embed');
+/** 타임라인 안에서는 ⌘K / Ctrl+K 를 바깥 창의 전체 검색으로 넘긴다. */
+if (D.embed) document.addEventListener('keydown', e => {
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  if ((mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+    e.preventDefault();
+    parent.postMessage({ type: 'schema-timeline:palette' }, '*');
+  }
+});
+
+/** PR 코멘트용 Markdown 요약: 결론, 주요 변경사항(유실·확인 필요), 테이블별 건수. */
+function reviewMarkdown() {
+  const flat = x => String(x).replace(/\s*\n\s*/g, ' ');
+  const code = (x, inTable) => '`' + flat(x).replace(/`/g, "'").replace(/\|/g, inTable ? '\\|' : '|') + '`';
+  const text = x => flat(x).replace(/([\\`*_[\]<>@#|~])/g, '\\$1');
+  const out = [L(`### 스키마 변경 리뷰: ${code(D.before.source)} → ${code(D.after.source)}`, `### Schema change review: ${code(D.before.source)} → ${code(D.after.source)}`), '', text(document.getElementById('headline').textContent), ''];
+  const risks = collectRisks();
+  if (risks.length) {
+    out.push(L(`**주요 변경사항 ${risks.length}건** (데이터 유실·확인 필요)`, `**Key changes (${risks.length})** (data loss or needs review)`), '');
+    risks.forEach(r => out.push(`- ${r.level === 'danger' ? `**${r.tag || L('데이터 유실', 'Data loss')}**` : L('확인 필요', 'Needs review')} · ${code(r.what)} — ${r.lead ? `${text(r.lead)} · ` : ''}${text(r.why)}`));
+    out.push('');
+  } else {
+    out.push(L('**주요 변경사항: 없음** (데이터 유실·적용 실패 예상 없음)', '**Key changes: none** (no data loss or failures expected)'), '');
+  }
+  const hints = collectHints();
+  if (hints.length) {
+    out.push(L(`**잠금 힌트 ${hints.length}건** (엔진의 일반 동작, 버전·설정에 따라 다름)`, `**Locking hints (${hints.length})** (typical engine behaviour; depends on version and settings)`), '');
+    hints.forEach(h => out.push(`- ${text(h.lead)} · ${code(h.what)} — ${text(h.why)}`));
+    out.push('');
+  }
+  const script = checkScript(risks);
+  if (script) out.push(L('**배포 전 확인 쿼리** (운영 DB에서 읽기 전용으로 실행)', '**Pre-deploy checks** (read-only, run on the production database)'), '', '```sql', script, '```', '');
+  const objs = objectRows();
+  if (objs.length) {
+    out.push(L(`**기타 객체 ${objs.length}건** (스키마 비교에는 나오지 않음)`, `**Other objects (${objs.length})** (not part of the schema diff)`), '');
+    objs.forEach(({ o, label, bad }) => out.push(`- ${label} · ${text(objNoun(o.type))} ${code(o.name)}${o.table ? ` (${code(o.table)})` : ''}${bad || o.status === 'INVALID' ? ' · INVALID' : ''}${o.step ? ` · ${text(o.step)}` : ''}`));
+    out.push('');
+  }
+  const rows = [
+    ...D.tables.filter(t => t.status !== 'same').map(t => { const x = tableStat(t);
+      const name = code((t.before_name ? t.before_name + ' → ' : '') + t.name, true);
+      if (isWhole(t)) return `| ${name} | ${tableLabel(t)} (${wholeCount(t)}) | | | |`;
+      return `| ${name} | ${tableLabel(t)} | ${x.add} | ${x.del} | ${x.chg} |`; }),
+    ...D.views.filter(v => v.status !== 'same').map(v => `| ${code(v.name, true)} | ${viewLabel(v.status)} | | | |`),
+  ];
+  if (rows.length) out.push(L('| 테이블 | 상태 | 추가 | 삭제 | 변경 |', '| Table | Status | Added | Dropped | Changed |'), '|---|---|--:|--:|--:|', ...rows);
+  return out.join('\n');
+}
+
+document.getElementById('copy-md').addEventListener('click', async e => {
+  const btn = e.currentTarget, md = reviewMarkdown(), ok = await copyText(md);
+  const msg = ok ? L('복사했습니다', 'Copied') : L('복사하지 못했습니다. 아래 내용을 직접 복사하세요.', 'Copy failed. Copy the text below manually.');
+  const status = document.getElementById('copy-status');
+  status.textContent = '';
+  setTimeout(() => { status.textContent = msg; }, 50);
+  btn.textContent = ok ? L('복사했습니다', 'Copied') : L('복사 실패', 'Copy failed');
+  setTimeout(() => { btn.textContent = L('리뷰 요약 복사', 'Copy review summary'); }, 2000);
+  const box = document.getElementById('md-out');
+  box.hidden = ok;
+  if (!ok) { box.value = md; box.focus(); box.select(); }
+});
+
+/** 인쇄할 때는 관계도를 종이 폭(PRINT_W)에 맞춰 줄인다. 최소 배율 제한은 두지 않는다. */
+const PRINT_W = 680;
+addEventListener('beforeprint', () => {
+  sqlUnfoldAll(document);
+  const s = Math.min(1, PRINT_W / (state.mapW || 1));
+  document.getElementById('map').style.transform = s < 1 ? `scale(${s})` : '';
+  const box = document.getElementById('map-scale');
+  box.style.width = Math.ceil(state.mapW * s) + 'px';
+  box.style.height = Math.ceil(state.mapH * s) + 'px';
+});
+addEventListener('afterprint', applyZoom);
+
+applyLang();
+renderSummary();
+renderBlocks();
+const hasDdl = D.tables.some(t => t.ddl && (t.ddl.before != null || t.ddl.after != null));
+document.getElementById('view-seg').hidden = !hasDdl;
+document.querySelectorAll('#view-seg button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+try { if (hasDdl && localStorage.getItem('schema-review-view') === 'ddl') setView('ddl'); } catch (e) {}
+setScope((D.tables.length > 12 || (innerWidth < 600 && D.tables.length > 4)) && CHANGED.size && CHANGED.size < D.tables.length ? 'focus' : 'all');
+if (location.hash.startsWith('#tb-')) {
+  let name = location.hash.slice(4);
+  try { name = decodeURIComponent(name); } catch (e) {}
+  if (document.getElementById(tableKey(name))?.classList.contains('blk')) setTimeout(() => focusRow(name));
+}
+trackActive();
+</script>
+</body>
+</html>
