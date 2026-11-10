@@ -4,6 +4,8 @@
 
 **DB 스키마 변경사항을 시각화하는** [Claude Code](https://claude.com/claude-code) Skill 입니다. 마이그레이션 이력(Flyway, Supabase, Prisma, Drizzle, 번호 붙은 SQL 파일)을 임시 컨테이너에 실제로 재생해서 **HTML 한 장**으로 보여 줍니다. 이 한 장에 들어가는 것:
 
+> **[인터랙티브 데모 체험하기](https://myeoungdev.github.io/schema-timeline/ko/)** · [English demo](https://myeoungdev.github.io/schema-timeline/en/)
+
 - 버전 타임라인
 - 단계별 스키마 diff 와 변경 리뷰, 관계도(ERD)
 - 이름 변경까지 이어 주는 테이블·컬럼 계보(스키마 변경 이력)
@@ -14,7 +16,7 @@
 버전마다 보이는 스키마는 마이그레이션을 실제 DB 에 적용한 뒤 카탈로그에서 읽은 것입니다. SQL 을 읽고 짜 맞춘 스키마가 아닙니다.
 
 > [!NOTE]
-> 화면은 한국어와 영어로 나옵니다(`--lang ko|en`). 위 움직이는 화면과 아래 화면은 이 저장소의 [`samples/demo`](samples/demo)(PostgreSQL, 8단계)를 재생한 결과입니다. DDL 두 개 비교 화면은 [`samples/v1.sql`](samples/v1.sql)과 [`samples/v2.sql`](samples/v2.sql)을 비교한 것입니다.
+> 화면은 한국어와 영어로 나옵니다(`--lang ko|en`). 위 움직이는 화면과 아래 화면은 이 저장소의 [`samples/demo`](samples/demo)(PostgreSQL, 10단계·테이블 17개)를 재생한 결과입니다. DDL 두 개 비교 화면은 [`samples/v1.sql`](samples/v1.sql)과 [`samples/v2.sql`](samples/v2.sql)을 비교한 것입니다.
 
 ## 기능
 
