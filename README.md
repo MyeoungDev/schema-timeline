@@ -4,6 +4,8 @@
 
 **Visualize database schema changes over time.** A [Claude Code](https://claude.com/claude-code) skill that replays your database migration history (Flyway, Supabase, Prisma, Drizzle, plain SQL files) in a throwaway container and turns it into **one self-contained HTML page**. The page holds:
 
+> **[Try the interactive demo](https://myeoungdev.github.io/schema-timeline/)** · [한국어 데모](https://myeoungdev.github.io/schema-timeline/ko/)
+
 - A version timeline.
 - A schema diff and change review for every step, with an ER diagram (ERD).
 - Table and column lineage that follows renames: the schema evolution of each object.
@@ -14,7 +16,7 @@
 The schema shown for each version is read from the database catalog after the migrations were actually applied. It is never reconstructed by parsing SQL.
 
 > [!NOTE]
-> The page is available in English and Korean (`--lang en|ko`). The animation above and the screenshots below come from [`samples/demo`](samples/demo), an 8-step PostgreSQL history included in this repository; the two-DDL screenshot compares [`samples/v1.sql`](samples/v1.sql) and [`samples/v2.sql`](samples/v2.sql).
+> The page is available in English and Korean (`--lang en|ko`). The animation above and the screenshots below come from [`samples/demo`](samples/demo), a 10-step PostgreSQL history with 17 tables; the two-DDL screenshot compares [`samples/v1.sql`](samples/v1.sql) and [`samples/v2.sql`](samples/v2.sql).
 
 ## Features
 

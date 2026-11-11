@@ -6,5 +6,7 @@
   "V5__shipments.sql": "Adds a shipment status enum and a shipments table that references orders.",
   "V6__order_summary_view.sql": "Adds a view of order count and amount per customer.",
   "V7__drop_legacy.sql": "Drops the whole legacy coupons table and the customers.fax and orders.memo columns. Their data is lost.",
-  "V8__recreate_tags.sql": "Drops and recreates the tags table with a longer label and a color. All existing tag rows are lost."
+  "V8__recreate_tags.sql": "Drops and recreates the tags table with a longer label and a color. All existing tag rows are lost.",
+  "V9__catalog_and_inventory.sql": "Adds product categories, supplier catalogs and multi-warehouse inventory with a low-stock index.",
+  "V10__customer_operations.sql": "Adds customer addresses, payment records, product returns, returned line items and an order status event log."
 }

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f1">
+  <meta name="description" content="Explore an interactive, sample database migration history with schema-timeline.">
+  <title>schema-timeline — interactive demo</title>
+  <style>
+    :root { color-scheme: light; --ink:#17221d; --muted:#5c6861; --line:#d9dfd9; --paper:#f6f5f1; --green:#195b43; }
+    * { box-sizing:border-box } body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif }
+    main { width:min(1080px,calc(100% - 40px)); margin:auto } header { display:flex; justify-content:space-between; align-items:center; padding:26px 0; border-bottom:1px solid var(--line) }
+    .brand { font-weight:750; letter-spacing:-.04em } nav { display:flex; gap:20px; font-size:14px } a { color:inherit; text-decoration:none } a:hover { text-decoration:underline; text-underline-offset:4px }
+    .hero { padding:90px 0 66px; max-width:800px } .eyebrow { color:var(--green); font-size:12px; font-weight:750; letter-spacing:.14em; text-transform:uppercase }
+    h1 { max-width:760px; margin:16px 0 20px; font-size:clamp(42px,8vw,82px); line-height:.98; letter-spacing:-.065em }
+    .intro { max-width:620px; color:var(--muted); font-size:19px }
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:8px 0 80px }
+    .card { display:flex; flex-direction:column; min-height:255px; padding:27px; border:1px solid var(--line); border-radius:18px; background:#fff }
+    .card h2 { margin:14px 0 6px; font-size:25px; letter-spacing:-.04em } .card p { margin:0 0 24px; color:var(--muted) }
+    .button { align-self:flex-start; margin-top:auto; padding:12px 17px; border-radius:999px; background:var(--green); color:#fff; font-weight:700 }
+    .button:hover { background:#10452f; text-decoration:none } .ko .button { background:#28362d } .badge { display:inline-flex; align-self:flex-start; padding:5px 9px; border-radius:999px; background:#edf5db; color:#31572a; font-size:12px; font-weight:700 }
+    .details { display:grid; grid-template-columns:1fr 1fr; gap:48px; padding:30px 0 70px; border-top:1px solid var(--line) } .details h3 { margin:0 0 9px; font-size:16px } .details p { margin:0; color:var(--muted); font-size:14px }
+    footer { display:flex; justify-content:space-between; gap:20px; padding:20px 0 32px; border-top:1px solid var(--line); color:var(--muted); font-size:13px }
+    @media(max-width:650px) { header { align-items:flex-start } nav { gap:12px; flex-direction:column; text-align:right } .hero { padding:66px 0 48px } .cards,.details { grid-template-columns:1fr; gap:12px } .card { min-height:220px } footer { flex-direction:column } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="./">schema-timeline</a><nav><a href="https://github.com/MyeoungDev/schema-timeline">GitHub repository ↗</a><a href="https://github.com/MyeoungDev/schema-timeline/blob/master/README.md">Documentation ↗</a></nav></header>
+    <section class="hero">
+      <div class="eyebrow">A hands-on product demo</div>
+      <h1>See how your schema changed.</h1>
+      <p class="intro">Explore a real, eight-step sample migration history. Move through versions, inspect table changes, follow column lineage, search the schema, and compare a range.</p>
+    </section>
+    <section class="cards" aria-label="Choose demo language">
+      <article class="card"><span class="badge">10 migration steps · 17 tables · PostgreSQL</span><h2>English demo</h2><p>Open the interactive schema timeline with the sample history and review notes.</p><a class="button" href="./en/">Explore the demo ↗</a></article>
+      <article class="card ko" lang="ko"><span class="badge">마이그레이션 10단계 · 테이블 17개 · PostgreSQL</span><h2>한국어 데모</h2><p>샘플 마이그레이션 이력을 따라가며 테이블 변경, 컬럼 계보, 검색과 구간 비교를 살펴보세요.</p><a class="button" href="./ko/">데모 둘러보기 ↗</a></article>
+    </section>
+    <section class="details"><div><h3>Nothing to install</h3><p>The demo runs entirely in your browser. It contains no live database connection and sends no requests to third-party services.</p></div><div lang="ko"><h3>설치 없이 둘러보기</h3><p>데모는 브라우저에서만 실행됩니다. 실제 데이터베이스에 연결하지 않으며 외부 서비스로 요청을 보내지 않습니다.</p></div></section>
+    <footer><span>schema-timeline · open-source database migration review</span><span>Built from the repository’s <a href="https://github.com/MyeoungDev/schema-timeline/tree/master/samples/demo">public sample history</a>.</span></footer>
+  </main>
+</body>
+</html>

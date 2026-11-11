@@ -1,0 +1,53 @@
+name: Publish interactive demo
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build English and Korean sample timelines
+        run: |
+          set -euo pipefail
+          docker pull postgres:16-alpine
+          mkdir -p _site/en _site/ko
+          cp docs/site/index.html _site/index.html
+          for lang in en ko; do
+            out="$PWD/_site/$lang"
+            python3 scripts/replay.py samples/demo --out "$out" --lang "$lang"
+            cp "docs/demo/summary.$lang.json" "$out/summary.json"
+            python3 scripts/timeline.py "$out" --lang "$lang"
+            python3 scripts/render_timeline.py "$out" --out "$out/index.html" --lang "$lang" --no-sql
+          done
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
