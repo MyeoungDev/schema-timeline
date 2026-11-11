@@ -1,6 +1,6 @@
 """마이그레이션 이력을 빈 DB 하나(PostgreSQL, MySQL, MariaDB, Oracle)에 순서대로 적용하며 단계마다 카탈로그 스냅샷을 뜬다.
 
-사용법: python3 replay.py <레포 또는 마이그레이션 디렉터리> --out out/timeline [--format flyway] [--db postgres] [--image 이미지]
+사용법: python3 replay.py <레포 또는 마이그레이션 디렉터리> --out out/timeline [--format 형식] [--db postgres] [--image 이미지]
         [--ignore-repeatable] [--step-timeout 초] [--lang ko|en]
         python3 replay.py --cleanup        (남은 재생용 컨테이너·네트워크 정리)
 --lang 은 steps.json 의 경고·오류 문구와 터미널 출력의 언어다.
@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -31,7 +32,8 @@ from i18n import L, add_argument, early, init, plural  # noqa: E402
 from idmap import IdMap, hints  # noqa: E402
 from snapshot import (DEFAULT_STEP_TIMEOUT, STEP_TIMEOUT_ENV, StepTimeout, cleanup, install_signal_handlers, psql, run,  # noqa: E402
                       set_step_timeout, timeout_text)
-from sources import FORMATS, find_git_snapshots, find_sql_files, find_steps, load  # noqa: E402,F401
+from sources import (FLYWAY_PLACEHOLDER, FORMATS, TEMPLATE_TEXT, file_list, find_git_snapshots, find_sql_files,  # noqa: E402,F401
+                     find_steps, guess_format, load)
 from scriptsplit import normalize  # noqa: E402
 from sqltext import head, mask_secrets, mask_snapshot, scrub, statement_spans, statements  # noqa: E402
 
@@ -41,6 +43,15 @@ DML_HEADS = ("INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE")
 NON_TX_HEADS = ("CREATE DATABASE", "DROP DATABASE", "ALTER SYSTEM", "CREATE TABLESPACE", "DROP TABLESPACE", "VACUUM")
 TX_CONTROL = ("BEGIN", "COMMIT", "ROLLBACK", "START TRANSACTION", "END")
 OUTPUTS = ("snapshots", "diffs", "events.json", "lineage.json", "steps.json", "snapshots_view.json", "check.json", "timeline.check.png")
+EXTENSION_IMAGES = {"vector": "pgvector/pgvector:pg{v}", "postgis": "postgis/postgis:{v}-3.5", "postgis_topology": "postgis/postgis:{v}-3.5",
+                    "postgis_raster": "postgis/postgis:{v}-3.5", "timescaledb": "timescale/timescaledb:latest-pg{v}"}
+SECRET_NAME = re.compile(r"(?:^|[._-]|(?<=[a-z]))(?:password|passwd|pwd|secret|token|(?:api|access|secret|private|encryption|signing)_?key"
+                         r"|credentials?)$", re.I)
+TYPE_EXTENSIONS = {"vector": "vector", "halfvec": "vector", "sparsevec": "vector", "geometry": "postgis", "geography": "postgis",
+                   "box2d": "postgis", "raster": "postgis_raster"}
+MISSING_EXTENSION = re.compile(r'extension "([\w-]+)" is not available|extension control file "[^"]*/([\w-]+)\.control"')
+MISSING_TYPE = re.compile(r'type "(?:\w+\.)?(\w+)" does not exist')
+SYNTAX_ERROR = re.compile(r"syntax error|error in your SQL syntax|ORA-00900|ORA-00911|ORA-00933", re.I)
 EXTENSION_STMT = re.compile(r'(?:CREATE\s+EXTENSION(?:\s+IF\s+NOT\s+EXISTS)?|COMMENT\s+ON\s+EXTENSION|ALTER\s+EXTENSION'
                             r'|DROP\s+EXTENSION(?:\s+IF\s+EXISTS)?)\s+"?([\w-]+)"?', re.I)
 
@@ -142,9 +153,104 @@ def fold_for(engine):
     return {"oracle": str.upper, "postgres": str.lower}.get(engine.name, lambda x: x)
 
 
-def replay_once(steps, image, roles, schema, prelude=None, skip_unavailable_extensions=False, engine=None):
+def parse_pairs(values, option, last=False):
+    """--placeholder·--replace 의 '이름=값' 목록을 (이름, 값) 목록으로. 첫 '=' 에서 나누고, last 면 마지막 '=' 에서 나눈다.
+
+    @throws SystemExit '=' 가 없거나 이름이 비면 멈춘다
+    """
+    out = []
+    for v in values or []:
+        key, sep, val = v.rpartition("=") if last else v.partition("=")
+        if not sep or not key:
+            raise SystemExit(L(f"{option} 은 '이름=값' 형식이어야 합니다: {v!r}", f"{option} must be 'name=value': {v!r}"))
+        out.append((key, val))
+    return out
+
+
+def replace_pattern(old):
+    """--replace 원문을 정규식으로. 낱말·기호 사이 어디에나 공백 0개 이상을 허용하고, 낱말 안은 붙어 있어야 한다."""
+    toks = re.findall(r"\w+|[^\w\s]", old)
+    return re.compile(r"\s*".join(re.escape(t) for t in toks)) if toks else re.compile(re.escape(old))
+
+
+def make_substitute(placeholders, replacements, flyway, schema):
+    """단계 SQL 에 적용할 치환 함수를 만든다.
+
+    placeholders 는 ${이름} 을 한 번에 값으로 바꾸고(값 안의 ${..} 는 다시 바꾸지 않는다), replacements 는 replace_pattern 으로 맞춘 원문을 값으로 바꾼다.
+    flyway 면 ${flyway:defaultSchema}·${flyway:table}·${flyway:filename}·${flyway:timestamp} 를 기본으로 채우고, placeholders 가 덮어쓴다.
+    @return (sql, 파일 이름) → 치환한 sql
+    """
+    patterns = [(replace_pattern(old), new) for old, new in replacements]
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def substitute(sql, filename):
+        values = {"flyway:defaultSchema": schema, "flyway:table": "flyway_schema_history", "flyway:filename": filename,
+                  "flyway:timestamp": stamp} if flyway else {}
+        values.update(placeholders)
+        if values:
+            sql = FLYWAY_PLACEHOLDER.sub(lambda m: values.get(m.group(1), m.group(0)), sql)
+        for pat, new in patterns:
+            sql = pat.sub(lambda m: new, sql)
+        return sql
+    return substitute
+
+
+def unused_substitutions(texts, placeholders, replacements):
+    """어느 단계에도 맞지 않는 --placeholder 이름과 --replace 원문 목록."""
+    texts = list(texts)
+    unused = [f"--placeholder {k}" for k in placeholders if not any("${" + k + "}" in t for t in texts)]
+    return unused + [f"--replace {old}" for old, _ in replacements if not any(replace_pattern(old).search(t) for t in texts)]
+
+
+def secret_placeholders(placeholders):
+    """이름이 비밀번호·토큰처럼 끝나는(dbPassword, jwt_secret, apiKey 등) placeholder 중 값이 네 글자 이상인 것."""
+    return {k: v for k, v in placeholders.items() if len(v) >= 4 and SECRET_NAME.search(k)}
+
+
+def unresolved_placeholders(steps, read):
+    """치환 뒤에도 남은 Flyway ${이름} 을 이름별 파일 목록으로 모은다."""
+    left = {}
+    for s in steps:
+        for name in FLYWAY_PLACEHOLDER.findall(read(s)):
+            left.setdefault(name, []).append(s.get("file") or s["path"].name)
+    return left
+
+
+def failure_hint(err, sql, engine, available=(), image=""):
+    """실패한 단계의 오류와 SQL 을 보고 다음에 할 일을 한 문장으로 돌려준다. 짚이는 것이 없으면 None.
+
+    @param available 재생 이미지에 있는 확장 이름들, @param image 지금 재생 이미지. 권할 이미지의 PostgreSQL 메이저 버전을 여기서 따른다
+    """
+    if engine.name == "postgres":
+        m = MISSING_EXTENSION.search(err)
+        ext = (m.group(1) or m.group(2)).lower() if m else None
+        if not ext:
+            t = MISSING_TYPE.search(err)
+            ext = TYPE_EXTENSIONS.get(t.group(1).lower()) if t else None
+        if ext and ext in available:
+            return L(f"{ext} 확장은 이미지에 있지만 이 단계 전에 만들어지지 않았거나 search_path 밖 스키마에 있습니다. 이력에 CREATE EXTENSION {ext} 가 있는지 확인하세요.",
+                     f"The {ext} extension is in the image but was not created before this step or lives outside the search_path. Check that the history runs CREATE EXTENSION {ext}.")
+        if ext:
+            tag = image.rsplit(":", 1)[-1] if image and ":" in image and "@" not in image else ""
+            v = re.search(r"(?:^|-)(?:pg)?(\d{2})(?!\d)", tag)
+            image = EXTENSION_IMAGES[ext].format(v=v.group(1) if v else "16") if ext in EXTENSION_IMAGES else None
+            return (L(f"이미지에 {ext} 확장이 없습니다. --image {image} 처럼 이 확장이 든 이미지로 다시 재생하세요.",
+                      f"The image does not have the {ext} extension. Replay again with an image that has it, for example --image {image}.") if image
+                    else L(f"이미지에 {ext} 확장이 없습니다. 이 확장이 든 PostgreSQL 이미지를 --image 로 주세요.",
+                           f"The image does not have the {ext} extension. Pass a PostgreSQL image that has it with --image."))
+    if (FLYWAY_PLACEHOLDER.search(sql) or TEMPLATE_TEXT.search(sql)) and SYNTAX_ERROR.search(err):
+        return L("SQL 에 치환되지 않은 자리표시자(${...} 또는 {{ ... }})가 있습니다. --placeholder 이름=값 이나 --replace 원문=값 으로 바꿔 재생하세요.",
+                 "The SQL has unsubstituted placeholders (${...} or {{ ... }}). Replace them with --placeholder name=value or --replace text=value and replay.")
+    return None
+
+
+def replay_once(steps, image, roles, schema, prelude=None, skip_unavailable_extensions=False, engine=None, substitute=None,
+                shown=None, secret_values=()):
     """컨테이너 하나에서 처음부터 끝까지 재생한다. 없는 role 때문에 실패하면 그 role 이름을 돌려준다.
 
+    @param substitute (sql, 파일 이름) → sql. 단계 SQL 을 적용하기 전에 부른다
+    @param shown (sql, 파일 이름) → 결과에 남길 sql. 비밀 placeholder 자리에 값 대신 ******** 를 넣는다. 없으면 substitute 결과를 쓴다
+    @param secret_values 오류 문구와 스냅샷에서 지울 비밀 placeholder 값
     @return (snapshots, step_rows, missing_role)
     """
     engine = engine or engines.get("postgres")
@@ -163,9 +269,11 @@ def replay_once(steps, image, roles, schema, prelude=None, skip_unavailable_exte
         failed = False
         secrets = []
         for i, s in enumerate(steps, 1):
-            raw = s["text"] if "text" in s else s["path"].read_text(encoding="utf-8-sig")
+            source = s["text"] if "text" in s else s["path"].read_text(encoding="utf-8-sig")
             name = s.get("file") or s["path"].name
-            masked, found = mask_secrets(raw, engine.dialect)
+            raw = substitute(source, name) if substitute else source
+            masked, found = mask_secrets(shown(source, name) if shown else raw, engine.dialect)
+            found += [v for v in secret_values if v in raw]
             secrets += found
             dml, tx, warnings = analyze(raw, engine.name)
             row = {"index": i, "version": s["version"], "label": s["label"], "description": s["description"],
@@ -206,7 +314,8 @@ def replay_once(steps, image, roles, schema, prelude=None, skip_unavailable_exte
                 if not engine.transactional_ddl:
                     row["warnings"].append(L(f"{engine.label} 의 DDL 은 트랜잭션으로 묶이지 않아, 실패한 문장 앞까지는 적용된 상태입니다.",
                                          f"{engine.label} DDL is not transactional, so statements before the failed one stay applied."))
-                row.update(status="failed", error=scrub(err, found))
+                hint = failure_hint(err, sql, engine, available, image)
+                row.update(status="failed", error=scrub(err, found) + (f"\n{L('조치', 'Next step')}: {hint}" if hint else ""))
                 rows.append(row)
                 failed = True
                 continue
@@ -242,14 +351,21 @@ def main():
                                            "Oracle 은 사용자(기본 REPLAY)",
                                            "Schema to snapshot. PostgreSQL: schema (default public), MySQL and MariaDB: database (default replay), "
                                            "Oracle: user (default REPLAY)"))
-    parser.add_argument("--format", choices=FORMATS, default="flyway",
-                        help=L("flyway: V<버전>__<설명>.sql, sqlfiles: <번호>__<설명>.sql 을 번호 순으로(init 먼저), "
+    parser.add_argument("--format", choices=FORMATS,
+                        help=L("없으면 --file 이 있을 때 git-snapshots, 아니면 디렉터리를 보고 고른다(Flyway·Prisma·Drizzle·Supabase 중 한 형식, 없으면 번호 붙은 SQL 디렉터리 한 곳, 아무것도 없으면 flyway). flyway: V<버전>__<설명>.sql, sqlfiles: <번호>__<설명>.sql 을 번호 순으로(init 먼저), "
                                "git-snapshots: 전체 스키마 파일(--file)의 git 리비전마다 빈 DB 에 적용, "
                                "supabase: supabase/migrations, prisma: prisma/migrations, drizzle: drizzle/ 와 meta/_journal.json",
+                               "When omitted: git-snapshots if --file is given, else chosen from the directory (one of Flyway, Prisma, Drizzle, Supabase, else one directory of numbered SQL files, else flyway). "
                                "flyway: V<version>__<description>.sql, sqlfiles: <number>__<description>.sql in number order (init first), "
                                "git-snapshots: apply each git revision of a full schema file (--file) to an empty database, "
                                "supabase: supabase/migrations, prisma: prisma/migrations, drizzle: drizzle/ and meta/_journal.json"))
     parser.add_argument("--file", help=L("git-snapshots 에서 쓸 전체 스키마 파일의 레포 기준 경로", "Path of the full schema file for git-snapshots, relative to the repo"))
+    parser.add_argument("--placeholder", action="append", metavar="NAME=VALUE",
+                        help=L("단계 SQL 의 ${NAME} 을 VALUE 로 바꾼다. 여러 번 줄 수 있다",
+                               "Replace ${NAME} in the step SQL with VALUE. Can be repeated"))
+    parser.add_argument("--replace", action="append", metavar="TEXT=VALUE",
+                        help=L("단계 SQL 의 TEXT 를 VALUE 로 바꾼다. 마지막 '=' 에서 나누고, 공백 차이는 무시한다. 여러 번 줄 수 있다",
+                               "Replace TEXT in the step SQL with VALUE. Split at the last '='; whitespace differences are ignored. Can be repeated"))
     parser.add_argument("--ignore-repeatable", action="store_true",
                         help=L("R__ 와 SQL 콜백 파일을 빼고 진행한다", "Skip R__ and SQL callback files"))
     parser.add_argument("--step-timeout", type=float, metavar="SEC",
@@ -274,6 +390,16 @@ def main():
     engine = engines.get(args.db)
     args.image = args.image or engine.default_image
     args.schema = args.schema or engine.default_schema
+    given = args.migrations
+    if args.format is None and args.file:
+        args.format = "git-snapshots"
+    if args.format is None:
+        guessed, where = guess_format(args.migrations)
+        args.format = guessed or "flyway"
+        if guessed:
+            args.migrations = Path(where)
+            print(L(f"형식: {guessed}, 디렉터리: {where} (--format 이 없어 디렉터리를 보고 골랐습니다)",
+                    f"Format: {guessed}, directory: {where} (chosen because --format was not given)"), file=sys.stderr)
     src = load(args.format, args.migrations, args.file, engine.name)
     steps, skipped, warnings, notes = src.steps, src.skipped, list(src.warnings), list(src.notes)
     if not steps:
@@ -286,11 +412,28 @@ def main():
         warnings.append(L(f"{args.format} 기본 스키마의 대역({src.prelude.name})을 먼저 적용했습니다. 실제 플랫폼과 다를 수 있습니다.",
                           f"Applied a stand-in for the {args.format} default schema ({src.prelude.name}) first. It may differ from the real platform."))
 
-    roles = referenced_roles(s["text"] if "text" in s else s["path"].read_text(encoding="utf-8-sig") for s in steps)
+    placeholders = dict(parse_pairs(args.placeholder, "--placeholder"))
+    replacements = parse_pairs(args.replace, "--replace", last=True)
+    flyway = args.format == "flyway"
+    substitute = make_substitute(placeholders, replacements, flyway, args.schema)
+    secret = secret_placeholders(placeholders)
+    shown = make_substitute({**placeholders, **{k: "********" for k in secret}}, replacements, flyway, args.schema) if secret else None
+    original = lambda s: s["text"] if "text" in s else s["path"].read_text(encoding="utf-8-sig")
+    name_of = lambda s: s.get("file") or s["path"].name
+    read = lambda s: substitute(original(s), name_of(s))
+    placed = make_substitute(placeholders, [], flyway, args.schema)
+    for opt in (unused_substitutions((original(s) for s in steps), placeholders, [])
+                + unused_substitutions((placed(original(s), name_of(s)) for s in steps), {}, replacements)):
+        warnings.append(L(f"{opt} 은 어느 단계에도 맞지 않아 바꾼 것이 없습니다.", f"{opt} matched nothing in any step."))
+    if args.format == "flyway":
+        for name, files in sorted(unresolved_placeholders(steps, read).items()):
+            warnings.append(L(f"값이 없는 placeholder ${{{name}}} 를 그대로 적용합니다({file_list(files)}). --placeholder {name}=값 으로 주세요.",
+                              f"Placeholder ${{{name}}} has no value and is applied as is ({file_list(files)}). Pass --placeholder {name}=value."))
+    roles = referenced_roles(read(s) for s in steps)
     roles = [r for r in roles if r not in src.platform_roles]
     for _ in range(10):
         snaps, rows, missing = replay_once(steps, args.image, roles if engine.has_roles else [], args.schema, src.prelude,
-                                           src.skip_unavailable_extensions, engine)
+                                           src.skip_unavailable_extensions, engine, substitute, shown, tuple(secret.values()))
         if missing is None:
             break
         roles.append(missing)
@@ -308,7 +451,7 @@ def main():
     (out / "snapshots").mkdir()
     for i, doc in enumerate(snaps):
         (out / "snapshots" / f"{i:03d}.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2))
-    meta = {"source": str(args.migrations.resolve().name), "input": str(src.root), "engine": engine.name, "image": args.image,
+    meta = {"source": str(given.resolve().name), "input": str(src.root), "engine": engine.name, "image": args.image,
             "schema": args.schema,
             "format": args.format, "prelude": src.prelude.name if src.prelude else None,
             "roles_created": roles if engine.has_roles else [],

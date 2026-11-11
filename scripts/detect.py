@@ -14,17 +14,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from i18n import L, add_argument, early, init as init_lang  # noqa: E402
-from sources import ignored_file_warnings, timestamp_order_notes, version_gaps  # noqa: E402
+from i18n import L, add_argument, early, init as init_lang, plural  # noqa: E402
+from sources import (BASELINE, FLYWAY_DEFAULTS, FLYWAY_PLACEHOLDER, SKIP_DIRS, TEMPLATE_TEXT, VERSIONED as V_FILE,  # noqa: E402
+                     find_steps, ignored_file_warnings, numbered_sql_dirs, timestamp_order_notes, version_gaps, version_key)
 
-SKIP_DIRS = {".git", "node_modules", "target", "build", "out", "dist", ".gradle", ".idea", "venv", ".venv", "__pycache__"}
 VERSIONED = re.compile(r"^V\d+(?:[._]\d+)*__.+\.sql$")
 CALLBACK = re.compile(r"^(before|after)\w*\.sql$", re.IGNORECASE)
 DB_FROM_URL = [(r"jdbc:postgresql|postgres(?:ql)?://", "postgresql"), (r"jdbc:mysql|mysql://", "mysql"),
                (r"jdbc:mariadb|mariadb://", "mariadb"), (r"jdbc:sqlserver", "sqlserver"), (r"jdbc:oracle", "oracle"),
                (r"jdbc:h2", "h2")]
 ENGINES = {"postgresql": "postgres", "mysql": "mysql", "mariadb": "mariadb", "oracle": "oracle"}
-PLACEHOLDER = re.compile(r"\$\{([^}:]+)(?::[^}]*)?\}")
 
 
 def walk(root):
@@ -113,10 +112,6 @@ def tool_dirs(files):
     return sorted(out, key=lambda o: (o["format"], o["path"]))
 
 
-def dirs_sql_hint(files):
-    return any(f.suffix.lower() == ".sql" and re.match(r"^\d{6,}_+.+\.sql$", f.name) for f in files)
-
-
 def main():
     early()
     parser = argparse.ArgumentParser()
@@ -131,8 +126,8 @@ def main():
 
     dirs = {}
     for f in files:
-        if f.suffix.lower() == ".sql" and VERSIONED.match(f.name):
-            dirs.setdefault(f.parent, {"versioned": 0})["versioned"] += 1
+        if f.suffix.lower() == ".sql" and (VERSIONED.match(f.name) or BASELINE.match(f.name)):
+            dirs.setdefault(f.parent, {"versioned": 0})["versioned"] += bool(VERSIONED.match(f.name))
     migration_dirs = []
     placeholders_used = set()
     for d, info in sorted(dirs.items()):
@@ -142,28 +137,41 @@ def main():
         java = sorted(p.name for p in siblings if re.match(r"^V\d", p.name) and p.suffix in (".java", ".kt", ".class"))
         for p in siblings:
             if p.suffix == ".sql":
-                placeholders_used |= set(PLACEHOLDER.findall(p.read_text(errors="ignore")))
-        migration_dirs.append({"path": str(d), "versioned": info["versioned"], "repeatable": repeatable,
-                               "callbacks": callbacks, "code_migrations": java})
+                placeholders_used |= set(FLYWAY_PLACEHOLDER.findall(p.read_text(errors="ignore"))) - set(FLYWAY_DEFAULTS)
+        try:
+            steps = find_steps(d, recursive=False)[0]
+        except SystemExit:
+            steps = None
+        base = steps[0] if steps and BASELINE.match(steps[0]["path"].name) else None
+        below = sum(1 for p in siblings if V_FILE.match(p.name) and version_key(V_FILE.match(p.name).group(1)) <= base["key"]) if base else 0
+        migration_dirs.append({"path": str(d), "versioned": info["versioned"], "steps": info["versioned"] if steps is None else len(steps),
+                               "baseline": base["path"].name if base else None, "baseline_skipped": below,
+                               "repeatable": repeatable, "callbacks": callbacks, "code_migrations": java})
 
     journals = [] if not root.is_dir() else [j for j in root.rglob("meta/_journal.json")
                                              if not {".git", "node_modules"} & set(j.relative_to(root).parts)]
     tools = tool_dirs(files + [j for j in journals if j not in files])
     tool_paths = {t["path"] for t in tools}
-    numbered = {}
-    for f in files:
-        if str(f.parent) in tool_paths:
-            continue
-        if f.suffix.lower() == ".sql" and re.match(r"^\d{6,}_+.+\.sql$", f.name):
-            numbered.setdefault(f.parent, []).append(f)
     sql_dirs = []
-    for d, fs in sorted(numbered.items()):
-        if len(fs) < 2:
+    numbered = numbered_sql_dirs(root) if root.is_dir() else {}
+    for d, count in sorted(numbered.items()):
+        if str(d) in tool_paths or any(str(d).startswith(t + "/") for t in tool_paths):
             continue
-        head = "".join(f.read_text(errors="ignore")[:300] for f in fs[:5]).lower()
+        fs = sorted(f for f in d.glob("*.sql"))[:5]
+        head = "".join(f.read_text(errors="ignore")[:300] for f in fs).lower()
         init = [str(p.relative_to(d)) for p in d.rglob("init*.sql")]
-        sql_dirs.append({"path": str(d), "files": len(fs) + len(init), "init": init,
+        sql_dirs.append({"path": str(d), "files": count + len(init), "init": init,
                          "liquibase_formatted": "--changeset" in head or "--liquibase" in head})
+
+    found_templates = {}
+    history_dirs = [Path(x["path"]) for x in sql_dirs + migration_dirs + tools]
+    history_sql = [f for f in files if f.suffix.lower() == ".sql" and any(d == f.parent or d in f.parents for d in history_dirs)]
+    for f in sorted(history_sql):
+        for t in TEMPLATE_TEXT.findall(f.read_text(errors="ignore")):
+            shown = " ".join(t.split())
+            key = "".join(t.split())
+            found_templates[key] = max(found_templates.get(key, shown), shown, key=len)
+    templates = set(found_templates.values())
 
     other = []
     if any(f.name in ("alembic.ini",) for f in files):
@@ -187,7 +195,7 @@ def main():
         versions = [re.match(r"^V(\d+(?:[._]\d+)*)__", f.name).group(1).replace("_", ".")
                     for f in files if f.parent == d and VERSIONED.match(f.name)]
         notes += [f"{d}: {n}" for n in version_gaps(versions) + timestamp_order_notes(versions)]
-    if not migration_dirs and not tools and not dirs_sql_hint(files):
+    if not migration_dirs and not tools and not sql_dirs:
         warnings.append(L("마이그레이션 이력(Flyway V 파일, supabase/migrations, prisma/migrations, drizzle journal)을 찾지 못했습니다.",
                           "No migration history found (Flyway V files, supabase/migrations, prisma/migrations, drizzle journal)."))
     if len(tools) + bool(migration_dirs) + bool(sql_dirs) > 1:
@@ -212,6 +220,11 @@ def main():
         warnings.append(L("설정에서 DB 종류를 찾지 못했습니다. 사용자에게 확인하세요.",
                           "No database type found in the configuration. Ask the user."))
     for d in migration_dirs:
+        if d["baseline"]:
+            skipped = d["baseline_skipped"]
+            warnings.append(L(f"{d['path']}: baseline {d['baseline']} 부터 재생합니다." + (f" 그 버전 이하의 V 파일 {skipped}개는 재생하지 않습니다." if skipped else ""),
+                              f"{d['path']}: replay starts from baseline {d['baseline']}."
+                              + (f" {plural(skipped, 'V file', 'V files')} at or below its version {'is' if skipped == 1 else 'are'} not replayed." if skipped else "")))
         if d["repeatable"] or d["callbacks"]:
             warnings.append(L(f"{d['path']}: R__ 또는 SQL 콜백이 있습니다. 빼고 재생할지 사용자에게 확인하세요(--ignore-repeatable).",
                               f"{d['path']}: contains R__ files or SQL callbacks. Ask the user whether to replay without them (--ignore-repeatable)."))
@@ -220,8 +233,13 @@ def main():
                               f"{d['path']}: Java/Kotlin migrations are not replayed. The schema those steps create is missing."))
     undefined = sorted(placeholders_used - cfg["placeholders_defined"])
     if placeholders_used:
-        warnings.append(L("Flyway placeholder(${...})가 있습니다. 지금은 치환하지 않고 적용하므로 재생이 실패할 수 있습니다.",
-                          "Flyway placeholders (${...}) are present. They are applied without substitution, so the replay may fail."))
+        names = ", ".join(sorted(placeholders_used))
+        warnings.append(L(f"Flyway placeholder 가 있습니다: {names}. --placeholder 이름=값 으로 값을 주세요. 값이 없는 것은 그대로 적용하므로 재생이 실패할 수 있습니다.",
+                          f"Flyway placeholders are present: {names}. Give values with --placeholder name=value; placeholders without a value are applied as is, so the replay may fail."))
+    if templates:
+        shown = ", ".join(sorted(templates)[:3])
+        warnings.append(L(f"SQL 에 템플릿 자리표시자가 있습니다: {shown}. --replace '원문=값' 으로 바꿔 재생합니다(원문의 공백 차이는 무시).",
+                          f"The SQL contains template placeholders: {shown}. Replace them with --replace 'text=value' (whitespace differences in the text are ignored)."))
     if sql_dirs and not migration_dirs:
         lb = any(d["liquibase_formatted"] for d in sql_dirs)
         warnings.append(L("번호를 앞에 붙인 SQL 파일 이력입니다. --format sqlfiles 로 init 먼저, 이후 번호 순으로 적용합니다."
@@ -260,10 +278,10 @@ def main():
         "other_formats": other,
         "db_type": db, "db": ENGINES.get(db), "db_type_candidates": {k: sorted(v) for k, v in cfg["db_types"].items()},
         "migration_dirs": migration_dirs,
-        "steps": sum(d["versioned"] for d in migration_dirs) or (pg_tools or tools or [{"steps": 0}])[0]["steps"]
+        "steps": sum(d["steps"] for d in migration_dirs) or (pg_tools or tools or [{"steps": 0}])[0]["steps"]
                  or sum(d["files"] for d in sql_dirs),
         "locations": cfg["locations"],
-        "placeholders_used": sorted(placeholders_used), "placeholders_undefined": undefined,
+        "placeholders_used": sorted(placeholders_used), "placeholders_undefined": undefined, "templates_used": sorted(templates),
         "suggested_images": images,
         "supported": supported,
         "warnings": warnings,

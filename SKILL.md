@@ -50,19 +50,23 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/detect.py <레포 또는 마이그레이션 
 ```
 
 JSON 의 `format`, `migration_dirs`(Flyway), `tool_dirs`(Supabase·Prisma·Drizzle), `sql_file_dirs`(번호 붙은 SQL), `db_type`,
-`schema_candidates`, `steps`, `warnings`, `notes`, `suggested_images` 를 본다.
-`warnings` 에는 재생하지 않고 넘어가는 파일(Flyway undo `U<버전>__*.sql`, baseline `B<버전>__*.sql`, 소문자 `v2__*.sql`, `.SQL` 확장자, `V<버전>__<설명>.sql` 형식이 아닌 후보)이,
+`schema_candidates`, `steps`, `warnings`, `notes`, `suggested_images`, `placeholders_used`, `templates_used` 를 본다.
+`warnings` 에는 재생하지 않고 넘어가는 파일(Flyway undo `U<버전>__*.sql`, 소문자 `v2__*.sql`, `.SQL` 확장자, `V<버전>__<설명>.sql` 형식이 아닌 후보)이,
 `notes` 에는 정수 버전의 공백(`V4 이(가) V3 와 V5 사이에 없습니다`)과 타임스탬프 자릿수 혼용이 나온다. 재생 결과 `steps.json` 에도 같은 `warnings`·`notes` 가 들어간다. 이력 형식에 따라 재생 방식(`--format`)을 고른다.
 Supabase·Prisma·Drizzle 이면 재생 전에 `references/<형식>.md` 를 읽는다. 그 도구에서 재생이 실패하는 흔한 경우와 설명할 점이 있다.
 
 | 이력 모양 | `--format` | 입력 |
 |---|---|---|
-| `V<버전>__<설명>.sql` (Flyway) | `flyway` (기본) | 마이그레이션 디렉터리 |
-| `<번호·타임스탬프>__<설명>.sql`, 앞에 `init` 파일·디렉터리. Liquibase formatted SQL 을 Liquibase 없이 파일 단위로 적용하는 이력도 여기다 | `sqlfiles` | 그 디렉터리 |
+| `V<버전>__<설명>.sql` (Flyway) | `flyway` | 마이그레이션 디렉터리 |
+| `<번호·타임스탬프>__<설명>.sql`, 앞에 `init` 파일·디렉터리. Liquibase formatted SQL 을 Liquibase 없이 파일 단위로 적용하는 이력도 여기다. `.up.sql`/`.down.sql` 짝은 `.up.sql` 만 재생한다 | `sqlfiles` | 그 디렉터리 |
 | `supabase/migrations/<타임스탬프>_<이름>.sql` (Supabase CLI) | `supabase` | 레포 루트 또는 그 디렉터리 |
 | `prisma/migrations/<타임스탬프>_<이름>/migration.sql` (Prisma Migrate) | `prisma` | 레포 루트 또는 그 디렉터리 |
 | `<out>/NNNN_<이름>.sql` + `<out>/meta/_journal.json` (Drizzle Kit) | `drizzle` | 레포 루트 또는 out 디렉터리 |
 | 전체 스키마 파일 하나(`init.sql`, `schema.sql`)를 계속 고쳐 온 이력 | `git-snapshots` + `--file <레포 기준 경로>` | 레포 루트 |
+
+`--format` 을 빼면 replay.py 가 고른다. `--file` 이 있으면 git-snapshots, 아니면 입력 아래 Flyway·Prisma·Drizzle·Supabase 중 한 형식,
+없으면 번호 붙은 SQL 디렉터리 한 곳(seed·test·node_modules·build 제외), 아무것도 없으면 flyway 다. 형식이 섞였거나 후보 디렉터리가 여러 곳이면 목록과 함께 멈춘다.
+감지 결과에 이력이 여러 개면 자동 선택에 맡기지 말고 `--format` 과 해당 디렉터리를 준다. Supabase·Prisma·Drizzle 은 레포 루트를 줘도 아래 디렉터리에서 찾는다.
 
 `sqlfiles` 로 재생했는데 init 파일이 이미 최신 전체 스키마라서 뒤 파일과 겹치거나(이미 있는 컬럼 추가 오류),
 init 파일 자체가 빈 DB 에 적용되지 않으면, 그 init 파일의 git 이력을 `git-snapshots` 로 보는 편이 실제 이력에 맞다.
@@ -81,7 +85,9 @@ Liquibase changelog(`changelog-master.xml`), Alembic·Rails·Django 처럼 마�
 - 이력이 여러 곳(디렉터리 여러 개, Flyway 와 Prisma 가 함께 있음 등) → 어느 것을 재생할지.
 - R__·SQL 콜백 있음 → 빼고 재생할지(`--ignore-repeatable`). 빼면 그 파일이 만드는 뷰·함수는 결과에 없다.
 - `suggested_images` 에 DB 이미지 버전이 있음 → 그 이미지로 재생할지(`--image`). 운영과 버전이 같아야 카탈로그 표기가 같다.
-- placeholder(`${...}`)·Java 마이그레이션 → 재생이 실패하거나 그 단계가 빠질 수 있다고 알린다.
+- `placeholders_used`(Flyway `${...}`) → 설정 파일(`flyway.conf`, `application.yml` 의 `placeholders`)에서 값을 찾아 `--placeholder 이름=값` 으로 준다. 찾지 못하면 사용자에게 묻는다.
+- `templates_used`(`{{ ... }}` 등) → 그 도구가 넣는 값(예: GoTrue 의 Namespace 는 스키마 이름)을 사용자에게 확인하고 `--replace '원문=값'` 으로 준다.
+- Java 마이그레이션 → 그 단계가 빠진다고 알린다.
 
 ### 3. 재생과 렌더
 
@@ -89,8 +95,10 @@ Liquibase changelog(`changelog-master.xml`), Alembic·Rails·Django 처럼 마�
 bash ${CLAUDE_SKILL_DIR}/scripts/timeline.sh <입력> <출력 디렉터리> [--lang ko|en] [--db postgres|mysql|mariadb|oracle]
                                  [--format flyway|supabase|prisma|drizzle|sqlfiles|git-snapshots] [--file <경로>]
                                  [--schema <스키마>] [--image <이미지>] [--ignore-repeatable]
-                                 [--step-timeout <초>] [--no-sql]
+                                 [--placeholder <이름>=<값>] [--replace '<원문>=<값>'] [--step-timeout <초>] [--no-sql]
 ```
+
+Flyway baseline(`B<버전>__*.sql`)이 있으면 가장 높은 B 를 먼저 적용하고 그 버전 이하 V 는 건너뛴다(경고에 목록).
 
 `replay.py`(재생·스냅샷) → `timeline.py`(단계 diff·이벤트·계보) → `render_timeline.py`(HTML) 를 차례로 돈다.
 형식마다 단계 목록을 만드는 일은 `sources.py` 의 어댑터가, DB 마다 다른 기동·적용·카탈로그는 `engines.py`·`engine_*.py` 가 한다.
@@ -135,8 +143,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/replay.py --cleanup             # 라벨이 
 |---|---|
 | `relation ... does not exist` 가 첫 단계부터 | baseline 이후 이력만 있다. 운영 스키마 덤프(구조만)를 V0 으로 받아야 한다 |
 | `function/view ... does not exist` | R__ 를 빼고 재생해서 그 객체가 없다 |
-| `syntax error at or near "$"` | placeholder 가 치환되지 않았다 |
-| `extension ... is not available` | 기본 이미지에 없는 확장(PostGIS 등). 확장이 든 이미지를 `--image` 로 지정 |
+| `syntax error at or near "$"`·`"{"` | 자리표시자가 치환되지 않았다. 오류 끝 `조치:` 대로 `--placeholder`·`--replace` 로 다시 재생 |
+| `extension ... is not available`, `type "vector" does not exist` | 이미지에 없는 확장. 오류 끝 `조치:` 의 이미지(pgvector·PostGIS·TimescaleDB)를 받아도 되는지 사용자에게 묻고 `--image` 로 재생 |
 | `cannot run inside a transaction block` | 트랜잭션 밖에서만 되는 문장. 판정 누락이므로 사용자에게 알린다 |
 
 role 이 없어서 나는 오류는 스크립트가 role 을 만들고 다시 재생하므로 보통 보이지 않는다.
@@ -260,7 +268,7 @@ bash ${CLAUDE_SKILL_DIR}/scripts/compare.sh before.sql after.sql <출력 디렉�
 - 이름 변경 판정: PostgreSQL 은 카탈로그의 oid·attnum 으로, MySQL·MariaDB·Oracle 은 단계 SQL 의 RENAME·CHANGE 문으로 확정한다.
   동적 SQL(EXECUTE IMMEDIATE, PREPARE) 안의 이름 변경은 못 읽어 삭제+추가로 나온다.
 - MySQL·MariaDB·Oracle 의 DDL 은 트랜잭션으로 묶이지 않는다. 실패한 단계는 실패한 문장 앞까지 적용된 상태다(결과에는 그 단계의 스냅샷이 없다).
-- Liquibase CLI 재생, 코드로 된 마이그레이션(Java, Alembic 등), R__·SQL 콜백, placeholder 치환은 아직 없다.
+- Liquibase CLI 재생, 코드로 된 마이그레이션(Java, Alembic 등), R__·SQL 콜백은 아직 없다. placeholder 는 `--placeholder` 로 준 값만 치환한다.
 - Supabase 는 플랫폼 기본 스키마(auth·storage·역할)를 최소 대역으로 흉내 낸다. 실제 플랫폼과 다를 수 있다.
 - `git-snapshots` 는 리비전마다 DB 를 새로 만들므로 이름 변경이 "의심"으로만 나온다. 실패한 리비전 뒤는 재생하지 않는다.
 - 스냅샷 대상은 스키마 하나(`--schema`)의 테이블·컬럼·제약·인덱스·뷰·코멘트. PostgreSQL 은 enum 타입도 담는데, enum 값 변경은
@@ -269,7 +277,7 @@ bash ${CLAUDE_SKILL_DIR}/scripts/compare.sh before.sql after.sql <출력 디렉�
   본문 diff 와 시퀀스 옵션·domain·RLS 정책은 어느 엔진에서도 없다. MySQL·MariaDB 시퀀스·Oracle 의 일부 객체(JOB 등)는 변경 여부를 판정하지 않는다.
 - 다른 스키마의 테이블을 가리키는 FK(예: Supabase 의 `auth.users`)는 `auth.users` 처럼 스키마를 붙여 보이고, 관계도에는 그리지 않는다.
 - 재생은 PostgreSQL 에선 각 파일을 psql 트랜잭션 하나로, MySQL·MariaDB 는 mysql 클라이언트로, Oracle 은 sqlplus 로 적용한다.
-  Flyway CLI 와 동작이 다를 수 있는 기능(placeholder, 스크립트 설정 파일)은 반영하지 않는다.
+  Flyway CLI 와 동작이 다를 수 있는 기능(설정 파일의 placeholder 값 자동 적용, 스크립트 설정 파일)은 반영하지 않는다.
 - 시점별 DDL 은 원본과 글자 단위로 같지 않다. PostgreSQL 은 카탈로그에서 다시 만들고, MySQL·MariaDB 는 SHOW CREATE TABLE,
   Oracle 은 DBMS_METADATA 결과에 인덱스·코멘트 문을 붙인 것이다.
 

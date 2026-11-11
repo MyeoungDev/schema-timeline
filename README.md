@@ -107,6 +107,7 @@ Claude does the following:
 bash scripts/timeline.sh <repo-or-migration-dir> <out> [--db postgres|mysql|mariadb|oracle] \
      [--format flyway|sqlfiles|supabase|prisma|drizzle|git-snapshots] [--file <path>] \
      [--schema <name>] [--image <image>] [--ignore-repeatable] [--lang en|ko] \
+     [--placeholder <name>=<value>] [--replace '<text>=<value>'] \
      [--no-sql] [--step-timeout <seconds>]
 
 # Two DDL files → <out>/timeline.html (one-step timeline titled "Schema compare" in English, "스키마 비교" in Korean; <out> defaults to ./out)
@@ -167,12 +168,16 @@ You can link straight to a view: `#step=5`, `#step=5&view=ddl` or `#from=5&to=20
 
 | History layout | `--format` |
 |---|---|
-| Flyway `V<version>__<desc>.sql` | `flyway` (default) |
-| Numbered or timestamped SQL files, including Liquibase *formatted SQL* applied file by file | `sqlfiles` |
+| Flyway `V<version>__<desc>.sql` | `flyway` |
+| Numbered or timestamped SQL files, including Liquibase *formatted SQL* applied file by file. In `.up.sql`/`.down.sql` pairs (golang-migrate) only `.up.sql` is replayed | `sqlfiles` |
 | Supabase CLI `supabase/migrations/<ts>_<name>.sql` | `supabase` |
 | Prisma Migrate `prisma/migrations/<ts>_<name>/migration.sql` | `prisma` |
 | Drizzle Kit `NNNN_<name>.sql` + `meta/_journal.json` | `drizzle` |
 | One schema file (`schema.sql`, `init.sql`) edited over time in git | `git-snapshots --file <path>` |
+
+Without `--format` the format is chosen from the directory: `git-snapshots` if `--file` is given; otherwise the one format among Flyway, Prisma, Drizzle and Supabase found there; otherwise the one directory of numbered SQL files (`node_modules`, `build`, seed and test directories are ignored); otherwise `flyway`. If formats are mixed, or several directories qualify, the replay stops and asks for `--format` and a path. Prisma, Drizzle and Supabase histories are also found below the repo root (for example `packages/db/prisma/migrations` in a monorepo).
+
+Flyway baseline migrations (`B<version>__*.sql`): the highest one is applied first, and V files up to its version are skipped. `--placeholder name=value` replaces `${name}` in the step SQL of any format; with `--format flyway`, `${flyway:defaultSchema}`, `table`, `filename` and `timestamp` are filled in automatically. `--replace 'text=value'` replaces any other template text, such as Go's `{{ index .Options "Namespace" }}`; it splits at the last `=` and ignores whitespace differences. An option that matches nothing is reported. Substituted values appear in the page's SQL; where a placeholder's name ends like a secret (`dbPassword`, `jwt_secret`, `apiKey`, `private_key`, `token`) and its value has four or more characters, the page shows `********` in its place. When a step fails because the image lacks an extension (pgvector, PostGIS, TimescaleDB) or has an unsubstituted placeholder, the error ends with the option to use.
 
 Engines: PostgreSQL, MySQL, MariaDB and Oracle. Prisma and Drizzle are replayed when their provider or dialect is one of these; pass the matching `--db` (for example `--db mysql`), since the default is `postgres`. Supabase is replayed on PostgreSQL with a minimal stand-in for the platform schemas (`auth`, `storage`, roles).
 
@@ -202,9 +207,9 @@ Engine-specific start-up, apply and catalog queries live in `engines.py` and `en
 - Not replayed:
   - Liquibase XML/YAML changelogs
   - Code-based migrations (Java, Alembic, Rails, Django)
-  - Flyway repeatable migrations, callbacks and placeholders
+  - Flyway repeatable migrations and callbacks
 - Snapshots cover one schema's tables, columns, constraints, indexes, views and comments, plus PostgreSQL enum types. Functions, procedures, triggers, packages and sequences are not part of the schema diff; each step lists them by name as added, dropped, changed or (on Oracle) invalid. Domains and RLS policies are not captured.
-- Ignored files are reported, not replayed: Flyway undo (`U…`) and baseline (`B…`) migrations, lowercase `v…` files and `.SQL` extensions. Version gaps are noted.
+- Ignored files are reported, not replayed: Flyway undo (`U…`) migrations, lowercase `v…` files and `.SQL` extensions. Version gaps are noted.
 - Renames are confirmed only when the history is replayed on one database. Two-DDL compare and `git-snapshots` can only mark a rename as *suspected*.
 - MySQL, MariaDB and Oracle DDL is not transactional. A failed step is left partially applied, and no snapshot is taken for it.
 - The DDL shown at each version is regenerated from the catalog. It is not byte-identical to your source files.
@@ -215,7 +220,7 @@ Engine-specific start-up, apply and catalog queries live in `engines.py` and `en
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions and the pull request checklist, and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ```bash
-python3 -m unittest discover -s tests          # 237 tests; replay tests need Docker and the engine image (CI skips MySQL, MariaDB and Oracle)
+python3 -m unittest discover -s tests          # 258 tests; replay tests need Docker and the engine image (CI skips MySQL, MariaDB and Oracle)
 node scripts/check_html.mjs <out>/timeline.html # headless self-check, prints a JSON receipt
 bash docs/build_demo.sh                         # replay samples/demo in both languages and regenerate the README screenshots and GIF (GIF needs Pillow)
 ```

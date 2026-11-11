@@ -109,6 +109,7 @@ Claude 는 다음 순서로 진행합니다.
 bash scripts/timeline.sh <레포 또는 마이그레이션 디렉터리> <출력> [--db postgres|mysql|mariadb|oracle] \
      [--format flyway|sqlfiles|supabase|prisma|drizzle|git-snapshots] [--file <경로>] \
      [--schema <이름>] [--image <이미지>] [--ignore-repeatable] [--lang ko|en] \
+     [--placeholder <이름>=<값>] [--replace '<원문>=<값>'] \
      [--no-sql] [--step-timeout <초>]
 
 # DDL 두 개 → <출력>/timeline.html ("스키마 비교" 제목의 1단계 타임라인. <출력> 기본값은 ./out)
@@ -169,12 +170,16 @@ open /tmp/schema-demo/timeline.html        # Linux 는 xdg-open
 
 | 이력 모양 | `--format` |
 |---|---|
-| Flyway `V<버전>__<설명>.sql` | `flyway` (기본) |
-| 번호·타임스탬프가 붙은 SQL 파일. 파일 단위로 적용하는 Liquibase *formatted SQL* 포함 | `sqlfiles` |
+| Flyway `V<버전>__<설명>.sql` | `flyway` |
+| 번호·타임스탬프가 붙은 SQL 파일. 파일 단위로 적용하는 Liquibase *formatted SQL* 포함. `.up.sql`/`.down.sql` 짝(golang-migrate)은 `.up.sql` 만 재생 | `sqlfiles` |
 | Supabase CLI `supabase/migrations/<ts>_<이름>.sql` | `supabase` |
 | Prisma Migrate `prisma/migrations/<ts>_<이름>/migration.sql` | `prisma` |
 | Drizzle Kit `NNNN_<이름>.sql` + `meta/_journal.json` | `drizzle` |
 | git 에서 계속 고쳐 온 스키마 파일 하나(`schema.sql`, `init.sql`) | `git-snapshots --file <경로>` |
+
+`--format` 이 없으면 이렇게 고릅니다. `--file` 이 있으면 `git-snapshots`, 아니면 그 아래에서 찾은 Flyway·Prisma·Drizzle·Supabase 중 한 형식, 그것도 없으면 번호 붙은 SQL 파일이 모인 디렉터리 한 곳(`node_modules`, `build`, seed·test 디렉터리는 보지 않음), 아무것도 없으면 `flyway` 입니다. 형식이 섞여 있거나 해당 디렉터리가 여러 곳이면 멈추고 `--format` 과 경로를 달라고 합니다. Prisma·Drizzle·Supabase 이력은 레포 루트 아래 깊은 곳(모노레포의 `packages/db/prisma/migrations` 등)에 있어도 찾습니다.
+
+Flyway baseline(`B<버전>__*.sql`)은 가장 높은 것을 먼저 적용하고, 그 버전 이하의 V 파일은 건너뜁니다. `--placeholder 이름=값` 은 형식과 관계없이 단계 SQL 의 `${이름}` 을 바꿉니다. `--format flyway` 면 `${flyway:defaultSchema}`·`table`·`filename`·`timestamp` 는 자동으로 채웁니다. `--replace '원문=값'` 은 Go 의 `{{ index .Options "Namespace" }}` 같은 다른 템플릿 문구를 바꿉니다. 마지막 `=` 에서 나누고 공백 차이는 무시합니다. 아무것도 바꾸지 못한 옵션은 경고로 알립니다. 치환한 값은 페이지의 SQL 에 그대로 보이고, 이름이 비밀처럼 끝나는(`dbPassword`, `jwt_secret`, `apiKey`, `private_key`, `token`) placeholder 는 값이 네 글자 이상이면 그 자리를 `********` 로 보입니다. 이미지에 없는 확장(pgvector, PostGIS, TimescaleDB)이나 치환되지 않은 자리표시자 때문에 단계가 실패하면 오류 끝에 쓸 옵션을 알려 줍니다.
 
 엔진은 PostgreSQL, MySQL, MariaDB, Oracle 입니다. Prisma·Drizzle 은 provider·dialect 가 이 중 하나일 때 재생합니다. 기본값이 `postgres` 이므로 맞는 `--db`(예: `--db mysql`)를 함께 줍니다. Supabase 는 PostgreSQL 로 재생하고, 플랫폼 스키마(`auth`, `storage`, 역할)는 최소한으로 흉내 냅니다.
 
@@ -211,12 +216,12 @@ sources.py   →  replay.py           →  timeline.py            →  render_ti
 - 재생하지 않는 것:
   - Liquibase XML·YAML changelog
   - 코드로 된 마이그레이션(Java, Alembic, Rails, Django)
-  - Flyway 반복 마이그레이션·콜백·placeholder
+  - Flyway 반복 마이그레이션·콜백
 - 스냅샷 범위:
   - 담는 것: 스키마 하나의 테이블·컬럼·제약·인덱스·뷰·코멘트, PostgreSQL enum 타입
   - 스키마 diff 밖: 함수·프로시저·트리거·패키지·시퀀스. 단계마다 이름으로 추가·삭제·변경(Oracle 은 컴파일 오류 포함)을 따로 보여 줍니다.
   - 담지 않는 것: domain·RLS 정책
-- 재생하지 않는 파일은 경고로 알립니다: Flyway undo(`U…`)·baseline(`B…`), 소문자 `v…`, `.SQL` 확장자. 버전 공백도 안내합니다.
+- 재생하지 않는 파일은 경고로 알립니다: Flyway undo(`U…`), 소문자 `v…`, `.SQL` 확장자. 버전 공백도 안내합니다.
 - 이름 변경은 이력을 DB 하나에 재생할 때만 확정됩니다. DDL 두 개 비교와 `git-snapshots` 는 "의심"으로만 표시합니다.
 - MySQL·MariaDB·Oracle 의 DDL 은 트랜잭션으로 묶이지 않습니다. 실패한 단계는 일부만 적용된 채 남고, 그 단계의 스냅샷은 없습니다.
 - 버전마다 보이는 DDL 은 카탈로그에서 다시 만든 것입니다. 원본 파일과 글자 단위로 같지 않습니다.
@@ -227,7 +232,7 @@ sources.py   →  replay.py           →  timeline.py            →  render_ti
 준비 방법, 규칙, 풀 리퀘스트 확인 목록은 [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md), 변경 이력은 [CHANGELOG.md](CHANGELOG.md)에 있습니다.
 
 ```bash
-python3 -m unittest discover -s tests          # 테스트 237개. 재생 테스트는 Docker 와 엔진 이미지가 있어야 돎(CI 는 MySQL·MariaDB·Oracle 을 건너뜀)
+python3 -m unittest discover -s tests          # 테스트 258개. 재생 테스트는 Docker 와 엔진 이미지가 있어야 돎(CI 는 MySQL·MariaDB·Oracle 을 건너뜀)
 node scripts/check_html.mjs <출력>/timeline.html # 헤드리스 자체 점검, JSON 영수증 출력
 bash docs/build_demo.sh                         # samples/demo 를 두 언어로 재생해 README 화면과 GIF 다시 만들기(GIF 는 Pillow 필요)
 ```

@@ -26,7 +26,7 @@ set -- ${rest[@]+"${rest[@]}"}
 t() { if [ "$lang" = ko ]; then printf '%s' "$1"; else printf '%s' "$2"; fi; }
 
 usage() {
-  echo "$(t "사용법" "Usage"): $0 $(t "<레포 또는 마이그레이션 디렉터리> <출력 디렉터리>" "<repo or migrations directory> <output directory>") [--lang ko|en] [--format flyway|supabase|prisma|drizzle|sqlfiles|git-snapshots] [--image $(t "이미지" "image")] [--ignore-repeatable] [--step-timeout $(t "초" "seconds")] [--no-sql]" >&2
+  echo "$(t "사용법" "Usage"): $0 $(t "<레포 또는 마이그레이션 디렉터리> <출력 디렉터리>" "<repo or migrations directory> <output directory>") [--lang ko|en] [--format flyway|supabase|prisma|drizzle|sqlfiles|git-snapshots] [--image $(t "이미지" "image")] [--ignore-repeatable] [--placeholder $(t "이름=값" "name=value")] [--replace $(t "'원문=값'" "'text=value'")] [--step-timeout $(t "초" "seconds")] [--no-sql]" >&2
   exit 2
 }
 if [ "$lang_missing" = 1 ] || [ $# -lt 2 ]; then usage; fi

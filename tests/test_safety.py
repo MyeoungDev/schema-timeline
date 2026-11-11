@@ -236,11 +236,11 @@ class HistoryWarningsTest(unittest.TestCase):
 
     def test_ignored_files_and_gap(self):
         write_history(self.dir, {"V1__a.sql": "x", "V2__b.sql": "x", "V3__c.sql": "x", "V5__d.sql": "x",
-                                 "U3__undo.sql": "x", "B2__base.sql": "x", "v2__lower.sql": "x", "V4__ext.SQL": "x",
+                                 "U3__undo.sql": "x", "v2__lower.sql": "x", "V4__ext.SQL": "x",
                                  "007_numbered.sql": "x", "V9_single.sql": "x", "notes.txt": "x", "seed.sql": "x"})
         src = load("flyway", self.dir)
         text = "\n".join(src.warnings)
-        for name, hint in (("U3__undo.sql", "undo"), ("B2__base.sql", "baseline"), ("v2__lower.sql", "소문자"),
+        for name, hint in (("U3__undo.sql", "undo"), ("v2__lower.sql", "소문자"),
                            ("V4__ext.SQL", "확장자"), ("007_numbered.sql", "V<버전>__<설명>.sql"), ("V9_single.sql", "V<버전>__<설명>.sql")):
             self.assertIn(name, text)
             self.assertIn(hint, text)
@@ -249,6 +249,26 @@ class HistoryWarningsTest(unittest.TestCase):
         self.assertNotIn("notes.txt", text)
         self.assertEqual([s["version"] for s in src.steps], ["1", "2", "3", "5"])
         self.assertEqual(list(src.notes), ["V4 이(가) V3 와 V5 사이에 없습니다(버전 공백)."])
+
+    def test_baseline_replaces_older_versions(self):
+        write_history(self.dir, {"B1__old_base.sql": "x", "V1__a.sql": "x", "V2__b.sql": "x", "B2__base.sql": "x", "V3__c.sql": "x"})
+        src = load("flyway", self.dir)
+        self.assertEqual([s["label"] for s in src.steps], ["B2", "V3"])
+        text = "\n".join(src.warnings)
+        self.assertIn("B2__base.sql", text)
+        for name in ("V1__a.sql", "V2__b.sql", "B1__old_base.sql"):
+            self.assertIn(name, text)
+        self.assertNotIn("baseline 마이그레이션(B<버전>__*.sql)은 재생하지 않습니다", text)
+        self.assertEqual(list(src.notes), [])
+
+    def test_duplicate_baseline_versions_stop(self):
+        write_history(self.dir, {"B2__a.sql": "x", "B2.0__b.sql": "x", "V3__c.sql": "x"})
+        with self.assertRaises(SystemExit):
+            load("flyway", self.dir)
+
+    def test_baseline_does_not_create_version_gap_notes(self):
+        write_history(self.dir, {"B3__base.sql": "x", "V5__e.sql": "x"})
+        self.assertEqual(list(load("flyway", self.dir).notes), [])
 
     def test_gap_rules(self):
         self.assertEqual(version_gaps(["1", "2", "3"]), [])
